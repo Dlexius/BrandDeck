@@ -4,9 +4,11 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Papa from "papaparse";
 import {
   AlertTriangle,
+  ArrowRight,
   CheckCircle2,
   Download,
   FileArchive,
+  FileCheck2,
   FileSpreadsheet,
   FileText,
   Fingerprint,
@@ -211,6 +213,29 @@ type RecipeBuilderState = {
 
 type WorkspaceView = "generate" | "settings";
 type SettingsSection = "brand" | "templates" | "governance" | "recipes";
+type CreatorWorkflowStep = "brief" | "context" | "export";
+
+const CREATOR_WORKFLOW_STEPS: Array<{
+  id: CreatorWorkflowStep;
+  title: string;
+  detail: string;
+}> = [
+  {
+    id: "brief",
+    title: "Describe",
+    detail: "Prompt and deck type"
+  },
+  {
+    id: "context",
+    title: "Add Context",
+    detail: "Data and sources"
+  },
+  {
+    id: "export",
+    title: "Generate",
+    detail: "Review and export"
+  }
+];
 
 const DEFAULT_RECIPE_BUILDER: RecipeBuilderState = {
   name: "Customer Steering Committee Update",
@@ -289,10 +314,6 @@ function parseCsv(csvText: string) {
   }
 
   return rows;
-}
-
-function formatPercent(score: number) {
-  return `${Math.round(score)}%`;
 }
 
 function formatBytes(bytes: number) {
@@ -437,6 +458,107 @@ function StatusStrip({
   );
 }
 
+function CreatorWorkflowProgress({
+  activeStep,
+  onStepChange,
+  promptReady,
+  dataReady,
+  deckReady
+}: {
+  activeStep: CreatorWorkflowStep;
+  onStepChange: (step: CreatorWorkflowStep) => void;
+  promptReady: boolean;
+  dataReady: boolean;
+  deckReady: boolean;
+}) {
+  const activeIndex = CREATOR_WORKFLOW_STEPS.findIndex(
+    (step) => step.id === activeStep
+  );
+  const completionByStep: Record<CreatorWorkflowStep, boolean> = {
+    brief: promptReady,
+    context: dataReady,
+    export: deckReady
+  };
+  const progressWidth = `${((activeIndex + 1) / CREATOR_WORKFLOW_STEPS.length) * 100}%`;
+
+  function stepIcon(step: CreatorWorkflowStep) {
+    if (step === "brief") {
+      return <FileText className="h-4 w-4" />;
+    }
+
+    if (step === "context") {
+      return <FileSpreadsheet className="h-4 w-4" />;
+    }
+
+    return <FileCheck2 className="h-4 w-4" />;
+  }
+
+  return (
+    <Card className="workflow-soft-raise overflow-hidden">
+      <CardContent className="space-y-4">
+        <div className="h-1.5 overflow-hidden rounded-full bg-[#F3F3F3]">
+          <div
+            className="h-full rounded-full bg-brand-orange transition-[width] duration-500 ease-out"
+            style={{ width: progressWidth }}
+          />
+        </div>
+        <div className="grid gap-2 md:grid-cols-3">
+          {CREATOR_WORKFLOW_STEPS.map((step, index) => {
+            const isActive = step.id === activeStep;
+            const isComplete = completionByStep[step.id];
+            const isLocked =
+              (step.id === "context" && !promptReady) ||
+              (step.id === "export" && !dataReady);
+
+            return (
+              <button
+                key={step.id}
+                type="button"
+                onClick={() => onStepChange(step.id)}
+                disabled={isLocked}
+                className={`group rounded-md border px-3 py-3 text-left transition duration-300 disabled:cursor-not-allowed disabled:opacity-55 ${
+                  isActive
+                    ? "border-brand-orange bg-[#FFF7F2] shadow-sm"
+                    : "border-[#E5E0DB] bg-white hover:border-[#D7CABF]"
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <span
+                    className={`grid h-9 w-9 shrink-0 place-items-center rounded-md transition duration-300 ${
+                      isActive
+                        ? "bg-brand-orange text-white"
+                        : isComplete
+                          ? "bg-[#ECF7EF] text-[#188038]"
+                          : "bg-[#F3F3F3] text-brand-ink"
+                    }`}
+                  >
+                    {isComplete && !isActive ? (
+                      <CheckCircle2 className="h-4 w-4" />
+                    ) : (
+                      stepIcon(step.id)
+                    )}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-[10px] font-black uppercase tracking-[0.08em] text-[#787E89]">
+                      Step {index + 1}
+                    </span>
+                    <span className="mt-1 block text-sm font-black text-brand-charcoal">
+                      {step.title}
+                    </span>
+                    <span className="mt-1 block text-xs font-semibold text-[#787E89]">
+                      {step.detail}
+                    </span>
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function ExportQualityPanel({
   report,
   accuracyAudit,
@@ -511,14 +633,14 @@ function ExportQualityPanel({
   const nextAction = canExport
     ? "Export PPTX"
     : !planReady
-      ? "Generate Deck"
+      ? "Generate Presentation"
       : !accuracyReady
         ? "Regenerate With Current Context"
         : !preflightReady
           ? "Review Brand Settings"
           : !objectMapReady
             ? "Review Template Map"
-            : "Generate Deck";
+            : "Generate Presentation";
 
   return (
     <Card>
@@ -606,45 +728,6 @@ function ValidationPanel({
             <StatusStrip report={report} />
           </div>
         </div>
-
-        <Card>
-          <CardContent className="space-y-4">
-            <div className="flex items-end justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase text-[#787E89]">
-                  Brand Fit
-                </p>
-                <p className="mt-1 text-4xl font-black text-brand-charcoal">
-                  {report ? formatPercent(report.complianceScore) : "--"}
-                </p>
-              </div>
-              <div className="text-right text-sm font-semibold text-brand-ink">
-                {report?.passed ? "Approved" : "Pending"}
-              </div>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-[#F3F3F3]">
-              <div
-                className="h-full rounded-full bg-brand-orange transition-all"
-                style={{ width: `${report?.complianceScore ?? 0}%` }}
-              />
-            </div>
-            <div className="border-t border-[#EFEAE5] pt-3">
-              <div className="flex items-end justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase text-[#787E89]">
-                    Content Accuracy
-                  </p>
-                  <p className="mt-1 text-3xl font-black text-brand-charcoal">
-                    {accuracyAudit ? formatPercent(accuracyAudit.accuracyScore) : "--"}
-                  </p>
-                </div>
-                <div className="text-right text-sm font-semibold text-brand-ink">
-                  {accuracyAudit?.passed ? "Grounded" : "Pending"}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
 
         <ExportQualityPanel
           report={report}
@@ -2677,7 +2760,7 @@ function DeckOutline({ deckPlan }: { deckPlan: DeckPlan | null }) {
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
           <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
-            Deck Outline Preview
+            Deck Outline
           </h2>
           <p className="mt-1 text-sm text-[#787E89]">
             {deckPlan
@@ -2718,8 +2801,8 @@ function DeckOutline({ deckPlan }: { deckPlan: DeckPlan | null }) {
                   <p className="truncate text-sm font-bold text-brand-charcoal">
                     {slide.title}
                   </p>
-                  <p className="mt-1 truncate text-xs text-[#787E89]">
-                    {(slide.source_refs ?? []).join(" | ")}
+                  <p className="mt-1 text-xs font-semibold text-[#787E89]">
+                    Approved template layout
                   </p>
                 </div>
                 <span className="col-start-2 mt-2 truncate rounded-sm bg-[#F3F3F3] px-2 py-1 font-mono text-xs font-semibold text-brand-ink md:col-start-auto md:mt-0">
@@ -3038,6 +3121,226 @@ function DeckRecipePanel({
   );
 }
 
+function CompactDeckRecipePicker({
+  selectedRecipeId,
+  deckPlan,
+  customRecipes,
+  onSelectedRecipeIdChange
+}: {
+  selectedRecipeId: string;
+  deckPlan: DeckPlan | null;
+  customRecipes: DeckRecipe[];
+  onSelectedRecipeIdChange: (recipeId: string) => void;
+}) {
+  const recipeLibrary = [...approvedDeckRecipes, ...customRecipes];
+  const selectedRecipe =
+    recipeLibrary.find((recipe) => recipe.recipe_id === selectedRecipeId) ??
+    (deckPlan?.deck_recipe_id
+      ? recipeLibrary.find((recipe) => recipe.recipe_id === deckPlan.deck_recipe_id)
+      : undefined);
+  const selectedLabel =
+    selectedRecipeId === "auto"
+      ? "Auto-select from prompt"
+      : selectedRecipe?.name ?? "Selected recipe";
+  const selectedDescription =
+    selectedRecipeId === "auto"
+      ? "BrandDeck will choose the best approved structure after it reads the prompt."
+      : selectedRecipe?.description ?? "Approved brand-safe deck structure.";
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
+            Deck Type
+          </h2>
+          <p className="mt-1 text-sm text-[#787E89]">
+            Leave this on auto unless the audience needs a specific preset.
+          </p>
+        </div>
+        <div className="rounded-sm bg-[#F3F3F3] px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] text-brand-ink">
+          {recipeLibrary.length} approved
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <label className="block">
+          <span className="mb-2 block text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
+            Structure
+          </span>
+          <select
+            value={selectedRecipeId}
+            onChange={(event) => onSelectedRecipeIdChange(event.target.value)}
+            className="h-11 w-full rounded-md border border-[#D7CABF] bg-white px-3 text-sm font-semibold text-brand-ink shadow-sm outline-none transition focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/20"
+          >
+            <option value="auto">Auto-select from prompt</option>
+            {recipeLibrary.map((recipe) => (
+              <option key={recipe.recipe_id} value={recipe.recipe_id}>
+                {recipe.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="rounded-md border border-[#EFEAE5] bg-[#FBFAF9] px-4 py-3">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-black text-brand-charcoal">
+                {selectedLabel}
+              </p>
+              <p className="mt-1 text-xs font-semibold leading-5 text-[#787E89]">
+                {selectedDescription}
+              </p>
+            </div>
+            <Layers3 className="mt-0.5 h-4 w-4 shrink-0 text-brand-orange" />
+          </div>
+          {selectedRecipe && (
+            <p className="mt-3 text-xs font-bold text-brand-ink">
+              Starts with {selectedRecipe.slide_sequence.length} slides; expands
+              with context when the source pack supports it.
+            </p>
+          )}
+        </div>
+
+        <details className="rounded-md border border-[#EFEAE5] bg-white px-4 py-3">
+          <summary className="cursor-pointer text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
+            View preset library
+          </summary>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {recipeLibrary.map((recipe) => (
+              <button
+                key={recipe.recipe_id}
+                type="button"
+                onClick={() => onSelectedRecipeIdChange(recipe.recipe_id)}
+                className={`rounded-md border px-3 py-2 text-left transition ${
+                  selectedRecipeId === recipe.recipe_id
+                    ? "border-brand-orange bg-[#FFF7F2]"
+                    : "border-[#EFEAE5] bg-white hover:border-[#D7CABF]"
+                }`}
+              >
+                <p className="truncate text-xs font-black text-brand-charcoal">
+                  {recipe.name}
+                </p>
+                <p className="mt-1 truncate text-[11px] font-semibold text-[#787E89]">
+                  {recipe.slide_sequence.length} starting slides
+                </p>
+              </button>
+            ))}
+          </div>
+        </details>
+      </CardContent>
+    </Card>
+  );
+}
+
+function BusinessDataCard({
+  kpiSummary,
+  loadingSample,
+  generating,
+  preparingExport,
+  onLoadSample,
+  onUpload
+}: {
+  kpiSummary: {
+    client?: string;
+    period?: string;
+    activeUsers: number;
+    licensedUsers: number;
+    adoptionScore: number;
+  } | null;
+  loadingSample: boolean;
+  generating: boolean;
+  preparingExport: boolean;
+  onLoadSample: () => void;
+  onUpload: (file: File | null) => void;
+}) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-col items-stretch justify-between gap-4 sm:flex-row sm:items-center">
+        <div>
+          <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
+            Business Data
+          </h2>
+          <p className="mt-1 text-sm text-[#787E89]">
+            Add the metrics BrandDeck should ground the presentation in.
+          </p>
+        </div>
+        <Button
+          variant="secondary"
+          className="w-full sm:w-auto"
+          onClick={onLoadSample}
+          disabled={loadingSample || generating || preparingExport}
+        >
+          {loadingSample ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <FileSpreadsheet className="h-4 w-4" />
+          )}
+          Load Test CSV
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_240px]">
+          <label className="block">
+            <span className="mb-2 block text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
+              CSV Upload
+            </span>
+            <Input
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(event) => onUpload(event.currentTarget.files?.[0] ?? null)}
+            />
+            <span className="mt-2 block text-xs font-semibold leading-5 text-[#787E89]">
+              CSV is the MVP input. Future connectors can feed this same data
+              slot.
+            </span>
+          </label>
+          <div
+            className={`border-l-2 px-4 py-3 transition ${
+              kpiSummary
+                ? "border-brand-orange bg-[#FFF7F2]"
+                : "border-[#D7CABF] bg-[#F3F3F3]"
+            }`}
+          >
+            <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#787E89]">
+              Current Data
+            </p>
+            <p className="mt-2 text-sm font-bold text-brand-charcoal">
+              {kpiSummary ? kpiSummary.client : "No client loaded"}
+            </p>
+            <p className="mt-1 text-xs font-semibold leading-5 text-[#787E89]">
+              {kpiSummary
+                ? `${kpiSummary.period} | ${kpiSummary.activeUsers}/${kpiSummary.licensedUsers} users | ${kpiSummary.adoptionScore}% score`
+                : "Load a CSV to continue"}
+            </p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ConnectorMiniNote() {
+  return (
+    <div className="flex flex-col gap-3 rounded-md border border-[#EFEAE5] bg-white px-4 py-3 text-sm font-semibold text-brand-ink md:flex-row md:items-center md:justify-between">
+      <div className="flex items-start gap-3">
+        <FileArchive className="mt-0.5 h-4 w-4 shrink-0 text-brand-orange" />
+        <div>
+          <p className="font-bold text-brand-charcoal">
+            Connector-ready context slot
+          </p>
+          <p className="mt-1 text-xs leading-5 text-[#787E89]">
+            Google Drive, OneDrive, Dropbox, Procore, Salesforce, and BI exports
+            can plug into this same step later.
+          </p>
+        </div>
+      </div>
+      <span className="shrink-0 rounded-sm bg-[#F3F3F3] px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-brand-ink">
+        Local MVP
+      </span>
+    </div>
+  );
+}
+
 function SourcePackPanel({
   sourceDocuments,
   sourceNotes,
@@ -3220,6 +3523,8 @@ export default function Home() {
     Record<string, BrandAssetSummary["role"]>
   >({});
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>("generate");
+  const [activeCreatorStep, setActiveCreatorStep] =
+    useState<CreatorWorkflowStep>("brief");
   const [settingsSection, setSettingsSection] =
     useState<SettingsSection>("brand");
   const [activeBrandContract, setActiveBrandContract] =
@@ -3344,13 +3649,26 @@ export default function Home() {
       adoptionScore
     };
   }, [currentRow]);
+  const promptReady = prompt.trim().length > 0;
+  const dataReady = csvRows.length > 0;
+  const deckReady = Boolean(
+    deckPlan && validationReport?.passed && accuracyAudit?.passed
+  );
+  const sourceContextCount =
+    sourceDocuments.length + (sourceNotes.trim() ? 1 : 0);
+
+  function resetGeneratedDeck() {
+    setDeckPlan(null);
+    setValidationReport(null);
+    setAccuracyAudit(null);
+    setExportCertificate(null);
+  }
 
   function ingestCsv(csvText: string, fileName: string) {
     const rows = parseCsv(csvText);
     setCsvRows(rows);
     setCsvFileName(fileName);
-    setAccuracyAudit(null);
-    setExportCertificate(null);
+    resetGeneratedDeck();
     setNotice(`${rows.length} business data rows loaded from ${fileName}.`);
     return rows;
   }
@@ -3588,8 +3906,7 @@ export default function Home() {
 
     setIngestingSources(true);
     setNotice("");
-    setAccuracyAudit(null);
-    setExportCertificate(null);
+    resetGeneratedDeck();
 
     try {
       const documents = await Promise.all(
@@ -3624,8 +3941,7 @@ export default function Home() {
   function handleClearSourcePack() {
     setSourceDocuments([]);
     setSourceNotes("");
-    setAccuracyAudit(null);
-    setExportCertificate(null);
+    resetGeneratedDeck();
     setNotice(
       "Source context cleared. The next deck will use business data and prompt evidence only."
     );
@@ -4157,6 +4473,7 @@ export default function Home() {
   }
 
   async function handleGenerate() {
+    setActiveCreatorStep("export");
     setGenerating(true);
     setPreparingExport(true);
     setAuditingExport(false);
@@ -4594,6 +4911,15 @@ export default function Home() {
     "--brand-fog":
       activeBrandContract.approved_color_tokens.light_gray ?? "#F3F3F3"
   } as CSSProperties;
+  const showExportRail =
+    workspaceView === "settings" ||
+    (workspaceView === "generate" &&
+      activeCreatorStep === "export" &&
+      (Boolean(deckPlan) ||
+        generating ||
+        preparingExport ||
+        auditingExport ||
+        exporting));
 
   return (
     <main
@@ -4634,7 +4960,9 @@ export default function Home() {
       <div
         className={`grid min-h-[calc(100vh-3.5rem)] grid-cols-1 ${
           workspaceView === "generate"
-            ? "lg:grid-cols-[minmax(0,1fr)_360px]"
+            ? showExportRail
+              ? "lg:grid-cols-[minmax(0,1fr)_360px]"
+              : "lg:grid-cols-[minmax(0,1fr)]"
             : "lg:grid-cols-[304px_minmax(0,1fr)_360px]"
         }`}
       >
@@ -4656,37 +4984,38 @@ export default function Home() {
           <div className="mx-auto max-w-5xl space-y-6">
             <div>
               <h1 className="text-3xl font-black tracking-normal text-brand-charcoal">
-                {workspaceView === "generate" ? "Generate Deck" : "Brand Settings"}
+                {workspaceView === "generate"
+                  ? "Generate Presentation"
+                  : "Brand Settings"}
               </h1>
               <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-[#787E89]">
                 {workspaceView === "generate"
                   ? "Describe the deck you need, add relevant context, and BrandDeck will prepare a brand-governed export without letting prompts change the visual system."
                   : "Admins maintain the brand contract, approved templates, object maps, assets, and deck recipes that keep every generated presentation on brand."}
               </p>
-              <div className="mt-5 grid gap-3 text-sm font-semibold text-[#787E89] md:grid-cols-3">
-                {(workspaceView === "generate"
-                  ? ["Describe Deck", "Add Context", "Export"]
-                  : ["Upload Brand Kit", "Map Objects", "Publish Controls"]
-                ).map(
-                  (step, index) => (
-                    <div key={step} className="flex items-center gap-3">
-                      <span
-                        className={`grid h-7 w-7 place-items-center rounded-full text-xs font-black ${
-                          index === 0
-                            ? "bg-brand-orange text-white"
-                            : "bg-white text-[#787E89] ring-1 ring-[#D7CABF]"
-                        }`}
-                      >
-                        {index + 1}
-                      </span>
-                      <span className="text-brand-ink">{step}</span>
-                      {index < 2 && (
-                        <span className="hidden h-px flex-1 bg-[#D7CABF] md:block" />
-                      )}
-                    </div>
-                  )
-                )}
-              </div>
+              {workspaceView === "settings" && (
+                <div className="mt-5 grid gap-3 text-sm font-semibold text-[#787E89] md:grid-cols-3">
+                  {["Upload Brand Kit", "Map Objects", "Publish Controls"].map(
+                    (step, index) => (
+                      <div key={step} className="flex items-center gap-3">
+                        <span
+                          className={`grid h-7 w-7 place-items-center rounded-full text-xs font-black ${
+                            index === 0
+                              ? "bg-brand-orange text-white"
+                              : "bg-white text-[#787E89] ring-1 ring-[#D7CABF]"
+                          }`}
+                        >
+                          {index + 1}
+                        </span>
+                        <span className="text-brand-ink">{step}</span>
+                        {index < 2 && (
+                          <span className="hidden h-px flex-1 bg-[#D7CABF] md:block" />
+                        )}
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
             </div>
 
             {workspaceView === "settings" ? (
@@ -4808,159 +5137,243 @@ export default function Home() {
               </>
             ) : (
               <>
-            <Card>
-              <CardHeader className="flex flex-col items-stretch justify-between gap-4 sm:flex-row sm:items-center">
-                <div>
-                  <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
-                    Create Deck Request
-                  </h2>
-                  <p className="mt-1 text-sm text-[#787E89]">
-                    Describe the deck, then attach business data and source
-                    context.
-                  </p>
-                </div>
-                  <Button
-                    variant="secondary"
-                    className="w-full sm:w-auto"
-                  onClick={handleLoadSample}
-                  disabled={loadingSample || generating || preparingExport}
-                >
-                  {loadingSample ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <FileSpreadsheet className="h-4 w-4" />
-                  )}
-                  Load Test CSV
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <label
-                    htmlFor="prompt"
-                    className="mb-2 block text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal"
-                  >
-                    Natural Language Prompt
-                  </label>
-                  <Textarea
-                    id="prompt"
-                    value={prompt}
-                    maxLength={1000}
-                    onChange={(event) => {
-                      setPrompt(event.target.value);
-                      setAccuracyAudit(null);
-                      setExportCertificate(null);
-                    }}
-                  />
-                  <div className="mt-2 text-right text-xs font-medium text-[#787E89]">
-                    {prompt.length} / 1000
-                  </div>
-                </div>
+                <CreatorWorkflowProgress
+                  activeStep={activeCreatorStep}
+                  onStepChange={setActiveCreatorStep}
+                  promptReady={promptReady}
+                  dataReady={dataReady}
+                  deckReady={deckReady}
+                />
 
-                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
-                  <label className="block">
-                    <span className="mb-2 block text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
-                      Business Data CSV
-                    </span>
-                    <Input
-                      type="file"
-                      accept=".csv,text/csv"
-                      onChange={(event) =>
-                        handleUpload(event.currentTarget.files?.[0] ?? null)
-                      }
+                {activeCreatorStep === "brief" && (
+                  <div key="brief" className="workflow-step-panel space-y-4">
+                    <Card>
+                      <CardHeader>
+                        <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
+                          Presentation Brief
+                        </h2>
+                        <p className="mt-1 text-sm text-[#787E89]">
+                          Ask for the presentation in plain language.
+                        </p>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div>
+                          <label
+                            htmlFor="prompt"
+                            className="mb-2 block text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal"
+                          >
+                            Request
+                          </label>
+                          <Textarea
+                            id="prompt"
+                            value={prompt}
+                            maxLength={1000}
+                            onChange={(event) => {
+                              setPrompt(event.target.value);
+                              resetGeneratedDeck();
+                            }}
+                            className="min-h-[168px]"
+                          />
+                          <div className="mt-2 text-right text-xs font-medium text-[#787E89]">
+                            {prompt.length} / 1000
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-3 border-t border-[#E5E0DB] pt-4 md:flex-row md:items-center md:justify-between">
+                          <div className="flex items-center gap-2 text-sm font-semibold text-brand-ink">
+                            <span className="grid h-5 w-5 place-items-center rounded-sm bg-brand-orange text-white">
+                              <Lock className="h-3.5 w-3.5" />
+                            </span>
+                            Brand system stays locked
+                          </div>
+                          <Button
+                            onClick={() => setActiveCreatorStep("context")}
+                            disabled={!promptReady}
+                          >
+                            Continue to Context
+                            <ArrowRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <CompactDeckRecipePicker
+                      selectedRecipeId={selectedRecipeId}
+                      deckPlan={deckPlan}
+                      customRecipes={customRecipes}
+                      onSelectedRecipeIdChange={(recipeId) => {
+                        setSelectedRecipeId(recipeId);
+                        resetGeneratedDeck();
+                      }}
                     />
-                    <span className="mt-2 block text-xs font-semibold leading-5 text-[#787E89]">
-                      MVP manual input for account metrics. Future connectors can
-                      replace this with Procore, Salesforce, CS, or BI data.
-                    </span>
-                  </label>
-                  <div className="border-l-2 border-brand-orange bg-[#F3F3F3] px-4 py-3">
-                    <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#787E89]">
-                      Current Business Data
-                    </p>
-                    <p className="mt-2 text-sm font-bold text-brand-charcoal">
-                      {kpiSummary ? kpiSummary.client : "No client loaded"}
-                    </p>
-                    <p className="mt-1 text-xs text-[#787E89]">
-                      {kpiSummary
-                        ? `${kpiSummary.period} | ${kpiSummary.activeUsers}/${kpiSummary.licensedUsers} users | ${kpiSummary.adoptionScore}% score`
-                        : "Business data rows will appear here"}
-                    </p>
                   </div>
-                </div>
+                )}
 
-                <div className="flex flex-col gap-3 border-t border-[#E5E0DB] pt-4 md:flex-row md:items-center md:justify-between">
-                  <Button onClick={handleGenerate} disabled={generating || preparingExport || auditingExport || exporting}>
-                    {generating || preparingExport || auditingExport ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-4 w-4" />
+                {activeCreatorStep === "context" && (
+                  <div key="context" className="workflow-step-panel space-y-4">
+                    <BusinessDataCard
+                      kpiSummary={kpiSummary}
+                      loadingSample={loadingSample}
+                      generating={generating}
+                      preparingExport={preparingExport}
+                      onLoadSample={handleLoadSample}
+                      onUpload={handleUpload}
+                    />
+
+                    <SourcePackPanel
+                      sourceDocuments={sourceDocuments}
+                      sourceNotes={sourceNotes}
+                      ingestingSources={ingestingSources}
+                      onSourceUpload={handleSourceUpload}
+                      onSourceNotesChange={(value) => {
+                        setSourceNotes(value);
+                        resetGeneratedDeck();
+                      }}
+                      onClearSources={handleClearSourcePack}
+                    />
+
+                    <ConnectorMiniNote />
+
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <Button
+                        variant="secondary"
+                        onClick={() => setActiveCreatorStep("brief")}
+                      >
+                        Back to Brief
+                      </Button>
+                      <Button
+                        onClick={() => setActiveCreatorStep("export")}
+                        disabled={!dataReady}
+                      >
+                        Continue to Generate
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {activeCreatorStep === "export" && (
+                  <div key="export" className="workflow-step-panel space-y-4">
+                    <Card>
+                      <CardHeader className="flex flex-col items-stretch justify-between gap-4 sm:flex-row sm:items-center">
+                        <div>
+                          <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
+                            Generate Presentation
+                          </h2>
+                          <p className="mt-1 text-sm text-[#787E89]">
+                            Review the inputs, then generate a governed PPTX.
+                          </p>
+                        </div>
+                        <StatusStrip report={validationReport} />
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="grid gap-3 md:grid-cols-3">
+                          <div className="border-l-2 border-brand-orange bg-white px-4 py-3 ring-1 ring-[#EFEAE5]">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#787E89]">
+                              Client
+                            </p>
+                            <p className="mt-1 text-sm font-black text-brand-charcoal">
+                              {kpiSummary?.client ?? "No client loaded"}
+                            </p>
+                            <p className="mt-1 text-xs font-semibold text-[#787E89]">
+                              {kpiSummary
+                                ? `${kpiSummary.period} | ${kpiSummary.adoptionScore}% adoption`
+                                : "Add business data before generating"}
+                            </p>
+                          </div>
+                          <div className="border-l-2 border-brand-orange bg-white px-4 py-3 ring-1 ring-[#EFEAE5]">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#787E89]">
+                              Context
+                            </p>
+                            <p className="mt-1 text-sm font-black text-brand-charcoal">
+                              {sourceContextCount} source
+                              {sourceContextCount === 1 ? "" : "s"}
+                            </p>
+                            <p className="mt-1 text-xs font-semibold text-[#787E89]">
+                              Claims stay grounded in loaded data and notes.
+                            </p>
+                          </div>
+                          <div className="border-l-2 border-brand-orange bg-white px-4 py-3 ring-1 ring-[#EFEAE5]">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#787E89]">
+                              Brand
+                            </p>
+                            <p className="mt-1 text-sm font-black text-brand-charcoal">
+                              {activeBrandContract.companyName}
+                            </p>
+                            <p className="mt-1 text-xs font-semibold text-[#787E89]">
+                              Approved layouts, colors, fonts, and assets only.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-3 border-t border-[#E5E0DB] pt-4 md:flex-row md:items-center md:justify-between">
+                          <Button
+                            variant="secondary"
+                            onClick={() => setActiveCreatorStep("context")}
+                          >
+                            Back to Context
+                          </Button>
+                          <Button
+                            onClick={handleGenerate}
+                            disabled={
+                              !dataReady ||
+                              generating ||
+                              preparingExport ||
+                              auditingExport ||
+                              exporting
+                            }
+                          >
+                            {generating || preparingExport || auditingExport ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Sparkles className="h-4 w-4" />
+                            )}
+                            {generating || preparingExport || auditingExport
+                              ? "Generating Presentation"
+                              : deckPlan
+                                ? "Regenerate Presentation"
+                                : "Generate Presentation"}
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {notice && (
+                      <div className="rounded-md border border-[#D7CABF] bg-white px-4 py-3 text-sm font-semibold text-brand-ink">
+                        {notice}
+                      </div>
                     )}
-                    {generating || preparingExport || auditingExport
-                      ? "Generating Deck"
-                      : "Generate Deck"}
-                  </Button>
-                  <div className="flex items-center gap-2 text-sm font-semibold text-brand-ink">
-                    <span className="grid h-5 w-5 place-items-center rounded-sm bg-brand-orange text-white">
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                    </span>
-                    Use approved templates only
+
+                    {deckPlan && <DeckOutline deckPlan={deckPlan} />}
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-
-                <DeckRecipePanel
-                  selectedRecipeId={selectedRecipeId}
-                  deckPlan={deckPlan}
-                  customRecipes={customRecipes}
-                  onSelectedRecipeIdChange={(recipeId) => {
-                    setSelectedRecipeId(recipeId);
-                    setAccuracyAudit(null);
-                    setExportCertificate(null);
-                  }}
-                />
-
-                <SourcePackPanel
-                  sourceDocuments={sourceDocuments}
-                  sourceNotes={sourceNotes}
-                  ingestingSources={ingestingSources}
-                  onSourceUpload={handleSourceUpload}
-                  onSourceNotesChange={(value) => {
-                    setSourceNotes(value);
-                    setAccuracyAudit(null);
-                    setExportCertificate(null);
-                  }}
-                  onClearSources={handleClearSourcePack}
-                />
-
-                <ConnectorReadinessPanel />
+                )}
               </>
             )}
 
-            {notice && (
+            {workspaceView === "settings" && notice && (
               <div className="rounded-md border border-[#D7CABF] bg-white px-4 py-3 text-sm font-semibold text-brand-ink">
                 {notice}
               </div>
             )}
-
-            <DeckOutline deckPlan={deckPlan} />
           </div>
         </section>
 
-        <ValidationPanel
-          report={validationReport}
-          accuracyAudit={accuracyAudit}
-          brandPreflight={brandPreflight}
-          templateGovernance={templateGovernance}
-          canExport={canExport}
-          generating={generating}
-          preparingExport={preparingExport}
-          exporting={exporting}
-          auditingExport={auditingExport}
-          usingTemplateCloneEdit={Boolean(templateKit)}
-          exportCertificate={exportCertificate}
-          onExport={handleExport}
-        />
+        {showExportRail && (
+          <ValidationPanel
+            report={validationReport}
+            accuracyAudit={accuracyAudit}
+            brandPreflight={brandPreflight}
+            templateGovernance={templateGovernance}
+            canExport={canExport}
+            generating={generating}
+            preparingExport={preparingExport}
+            exporting={exporting}
+            auditingExport={auditingExport}
+            usingTemplateCloneEdit={Boolean(templateKit)}
+            exportCertificate={exportCertificate}
+            onExport={handleExport}
+          />
+        )}
       </div>
     </main>
   );
