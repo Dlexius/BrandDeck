@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #1d1b1a;
+  --brand-accent: #ff5200;
+  --brand-accent-soft: #f97d40;
+  --brand-charcoal: #1d1b1a;
+  --brand-ink: #3a3735;
+  --brand-stone: #d7cabf;
+  --brand-fog: #f3f3f3;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Inter, "Helvetica Neue", Arial, sans-serif;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: var(--brand-accent);
+  color: #ffffff;
+}

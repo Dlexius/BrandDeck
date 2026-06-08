@@ -1,0 +1,181 @@
+{
+  "companyName": "Procore Demo Brand",
+  "version": "2025-template-demo",
+  "template_source": {
+    "name": "Copy of 2025 Procore Presentation Template.pptx",
+    "type": "approved_powerpoint_template",
+    "asset_policy": "Use extracted template assets for logo lockups, texture backgrounds, hero images, and approved icons. Do not redraw these marks manually."
+  },
+  "template_assets": {
+    "wordmark_black": "/brand-assets/procore-template/procore-wordmark-black.png",
+    "wordmark_white": "/brand-assets/procore-template/procore-wordmark-white.png",
+    "hero_photo": "/brand-assets/procore-template/report-hero-workers.jpg",
+    "texture_title": "/brand-assets/procore-template/texture-title.png",
+    "texture_agenda": "/brand-assets/procore-template/texture-agenda.png",
+    "icons": {
+      "data": "/brand-assets/procore-template/icon-data.png",
+      "insights": "/brand-assets/procore-template/icon-insights.png",
+      "mobile": "/brand-assets/procore-template/icon-mobile.png",
+      "project_management": "/brand-assets/procore-template/icon-project-management.png",
+      "reporting": "/brand-assets/procore-template/icon-reporting.png",
+      "rfi": "/brand-assets/procore-template/icon-rfi.png",
+      "warning": "/brand-assets/procore-template/icon-warning.png"
+    }
+  },
+  "approved_fonts": {
+    "heading": ["Inter Tight SemiBold", "Inter Tight", "Arial"],
+    "body": ["Inter", "Arial"],
+    "mono": ["DM Mono Medium", "DM Mono", "Courier New"]
+  },
+  "approved_color_tokens": {
+    "primary_orange": "#FF5200",
+    "secondary_orange": "#F97D40",
+    "template_coral": "#E46962",
+    "charcoal": "#1D1B1A",
+    "ink": "#3A3735",
+    "medium_gray": "#787E89",
+    "light_gray": "#F3F3F3",
+    "stone": "#D7CABF",
+    "warm_sand": "#ECE0D6",
+    "white": "#FFFFFF",
+    "black": "#000000"
+  },
+  "logo_rules": {
+    "lockup_text": "Procore Demo Brand",
+    "placement": "Bottom-left Procore wordmark with top-right hexagon mark, matching the approved template layout.",
+    "clear_space": "At least 0.2 in around the lockup.",
+    "minimum_size": "1.15 in wide",
+    "background_rule": "Use charcoal text on light backgrounds and white text on dark backgrounds.",
+    "do_not": [
+      "Do not stretch, rotate, recolor, or place the lockup over busy imagery.",
+      "Do not replace the wordmark with an unapproved logo."
+    ]
+  },
+  "chart_color_rules": {
+    "palette": ["#FF5200", "#3A3735", "#787E89", "#F97D40", "#D7CABF"],
+    "neutral_gridline": "#D7CABF",
+    "axis_label": "#3A3735",
+    "use_orange_for": "primary measure or current period",
+    "forbidden_chart_colors": ["#00FF00", "#0000FF", "#800080", "#FF00FF"]
+  },
+  "forbidden_rules": [
+    "Do not invent new slide layouts outside the approved layout list.",
+    "Do not use unapproved colors, gradients, shadows, or decorative effects in generated slides.",
+    "Do not resize logos inconsistently between slides.",
+    "Do not place more text than the layout maximums allow.",
+    "Do not allow AI-generated prose to select fonts, colors, charts, or object positions.",
+    "Do not use chart types outside the approved chart list for each layout.",
+    "Do not expose model names, API providers, or generation internals in client-facing decks."
+  ],
+  "approved_layouts": [
+    {
+      "layout_id": "title_client_report",
+      "name": "Title Client Report",
+      "purpose": "Opening title slide for a client-facing adoption report.",
+      "required_placeholders": ["client_name", "report_period", "subtitle"],
+      "max_text_lengths": {
+        "title": 64,
+        "client_name": 48,
+        "report_period": 36,
+        "subtitle": 120
+      },
+      "approved_chart_types": []
+    },
+    {
+      "layout_id": "agenda",
+      "name": "Agenda",
+      "purpose": "Sets the report sequence and discussion flow.",
+      "required_placeholders": ["agenda_items"],
+      "max_text_lengths": {
+        "title": 48,
+        "agenda_items": 68
+      },
+      "approved_chart_types": []
+    },
+    {
+      "layout_id": "executive_summary",
+      "name": "Executive Summary",
+      "purpose": "Summarizes adoption health, business impact, and decisions needed.",
+      "required_placeholders": ["summary_points", "business_impact"],
+      "max_text_lengths": {
+        "title": 24,
+        "summary_points": 42,
+        "business_impact": 78
+      },
+      "approved_chart_types": []
+    },
+    {
+      "layout_id": "adoption_kpi_scorecard",
+      "name": "Adoption KPI Scorecard",
+      "purpose": "Shows the key adoption metrics for the selected report period.",
+      "required_placeholders": [
+        "active_users",
+        "licensed_users",
+        "adoption_score",
+        "projects_active",
+        "mobile_usage_rate"
+      ],
+      "max_text_lengths": {
+        "title": 54,
+        "metric_label": 28,
+        "metric_value": 18,
+        "metric_context": 76
+      },
+      "approved_chart_types": ["scorecard"]
+    },
+    {
+      "layout_id": "usage_trend",
+      "name": "Usage Trend",
+      "purpose": "Shows adoption score and active user trend across report periods.",
+      "required_placeholders": ["chart_type", "trend_points", "trend_summary"],
+      "max_text_lengths": {
+        "title": 12,
+        "trend_summary": 72,
+        "label": 24
+      },
+      "approved_chart_types": ["line"]
+    },
+    {
+      "layout_id": "feature_adoption",
+      "name": "Feature Adoption",
+      "purpose": "Compares major workflow usage and highlights strongest and weakest features.",
+      "required_placeholders": [
+        "chart_type",
+        "feature_metrics",
+        "top_feature",
+        "lowest_feature"
+      ],
+      "max_text_lengths": {
+        "title": 56,
+        "top_feature": 48,
+        "lowest_feature": 48,
+        "feature_label": 32
+      },
+      "approved_chart_types": ["bar", "table"]
+    },
+    {
+      "layout_id": "risks_recommendations",
+      "name": "Risks & Recommendations",
+      "purpose": "Links adoption risks to practical recommendations.",
+      "required_placeholders": ["risk_summary", "recommendations"],
+      "max_text_lengths": {
+        "title": 56,
+        "risk_summary": 190,
+        "recommendations": 150
+      },
+      "approved_chart_types": []
+    },
+    {
+      "layout_id": "next_steps",
+      "name": "Next Steps",
+      "purpose": "Closes the report with action owners, milestones, or source notes.",
+      "required_placeholders": ["steps"],
+      "max_text_lengths": {
+        "title": 48,
+        "steps": 140,
+        "note": 160
+      },
+      "approved_chart_types": []
+    }
+  ]
+}

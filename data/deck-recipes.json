@@ -1,0 +1,78 @@
+{
+  "schema": "branddeck.deck-recipes/v1",
+  "recipes": [
+    {
+      "recipe_id": "client_adoption_report",
+      "name": "Client Adoption Report",
+      "mode": "predefined",
+      "description": "Default customer-facing adoption report with summary, KPI health, trend, feature usage, risks, next steps, and source notes.",
+      "audience": "Customer executives, implementation leaders, and customer success teams",
+      "intent_keywords": ["adoption", "report", "usage", "client", "customer", "monthly", "quarterly"],
+      "slide_sequence": [
+        { "slide_role": "title", "layout_id": "title_client_report", "title": "Client Adoption Report", "content_focus": "Client, period, and approved report context.", "template_variant_key": "cover_default" },
+        { "slide_role": "agenda", "layout_id": "agenda", "title": "Discussion Flow", "content_focus": "Executive summary, KPI health, trend, feature adoption, risks, and next steps." },
+        { "slide_role": "executive_summary", "layout_id": "executive_summary", "title": "Executive Summary", "content_focus": "Current adoption health, business impact, and decisions needed." },
+        { "slide_role": "kpi_scorecard", "layout_id": "adoption_kpi_scorecard", "title": "Adoption KPI Scorecard", "content_focus": "Active users, licensed users, adoption score, projects, and mobile usage." },
+        { "slide_role": "usage_trend", "layout_id": "usage_trend", "title": "Usage Trend", "content_focus": "Adoption score and active user movement across periods." },
+        { "slide_role": "feature_adoption", "layout_id": "feature_adoption", "title": "Feature Adoption", "content_focus": "Workflow usage and strongest or weakest feature signals." },
+        { "slide_role": "risks_recommendations", "layout_id": "risks_recommendations", "title": "Risks & Recommendations", "content_focus": "Risk summary tied to specific recommended actions.", "template_variant_key": "risk_actions_3up" },
+        { "slide_role": "next_steps", "layout_id": "next_steps", "title": "Next Steps", "content_focus": "Near-term operating actions.", "template_variant_key": "step_through_1" },
+        { "slide_role": "appendix_source_notes", "layout_id": "next_steps", "title": "Appendix: Source Notes", "content_focus": "Source data and generation controls.", "template_variant_key": "step_through_3" }
+      ]
+    },
+    {
+      "recipe_id": "executive_adoption_update",
+      "name": "Executive Adoption Update",
+      "mode": "predefined",
+      "description": "Shorter leadership update focused on adoption health, trajectory, risk, and decisions.",
+      "audience": "Executive sponsors, steering committees, and account leadership",
+      "intent_keywords": ["executive", "leadership", "board", "sponsor", "steering", "decision"],
+      "slide_sequence": [
+        { "slide_role": "title", "layout_id": "title_client_report", "title": "Executive Adoption Update", "content_focus": "Client, period, and executive update context.", "template_variant_key": "cover_split" },
+        { "slide_role": "agenda", "layout_id": "agenda", "title": "Leadership Discussion", "content_focus": "Adoption health, trend, risk, and decisions." },
+        { "slide_role": "executive_summary", "layout_id": "executive_summary", "title": "Executive Readout", "content_focus": "Decision-ready adoption narrative.", "template_variant_key": "summary_list_2col" },
+        { "slide_role": "kpi_scorecard", "layout_id": "adoption_kpi_scorecard", "title": "Adoption Health", "content_focus": "Current KPI health and licensed user coverage.", "template_variant_key": "kpi_point_summary" },
+        { "slide_role": "usage_trend", "layout_id": "usage_trend", "title": "Momentum Trend", "content_focus": "Adoption and active-user trajectory.", "template_variant_key": "trend_stacked_chart" },
+        { "slide_role": "risks_recommendations", "layout_id": "risks_recommendations", "title": "Leadership Actions", "content_focus": "Risks that require sponsor action.", "template_variant_key": "risk_actions_3up" },
+        { "slide_role": "next_steps", "layout_id": "next_steps", "title": "Decisions & Next Steps", "content_focus": "Executive decisions and near-term owners.", "template_variant_key": "step_through_2" },
+        { "slide_role": "appendix_source_notes", "layout_id": "next_steps", "title": "Appendix: Source Notes", "content_focus": "Source data and generation controls.", "template_variant_key": "step_through_3" }
+      ]
+    },
+    {
+      "recipe_id": "risk_remediation_plan",
+      "name": "Risk Remediation Plan",
+      "mode": "predefined",
+      "description": "Action-oriented plan for adoption risk, stalled workflows, and practical remediation.",
+      "audience": "Customer success leaders, implementation teams, and project operations owners",
+      "intent_keywords": ["risk", "remediation", "recommendation", "action", "recovery", "backsliding", "gap"],
+      "slide_sequence": [
+        { "slide_role": "title", "layout_id": "title_client_report", "title": "Adoption Risk Remediation Plan", "content_focus": "Client, period, and remediation context.", "template_variant_key": "cover_image_band" },
+        { "slide_role": "agenda", "layout_id": "agenda", "title": "Remediation Flow", "content_focus": "Risk, root signals, recommendations, and operating cadence." },
+        { "slide_role": "executive_summary", "layout_id": "executive_summary", "title": "Risk Summary", "content_focus": "Current risk and business implication.", "template_variant_key": "summary_list_2col" },
+        { "slide_role": "risks_recommendations", "layout_id": "risks_recommendations", "title": "Priority Risks & Recommendations", "content_focus": "Risks paired with actions.", "template_variant_key": "risk_actions_3up_alt" },
+        { "slide_role": "kpi_scorecard", "layout_id": "adoption_kpi_scorecard", "title": "Health Signals", "content_focus": "KPI evidence for remediation focus.", "template_variant_key": "kpi_category_summary" },
+        { "slide_role": "feature_adoption", "layout_id": "feature_adoption", "title": "Workflow Gaps", "content_focus": "Feature usage gaps and workflow ownership.", "template_variant_key": "feature_table_alt" },
+        { "slide_role": "next_steps", "layout_id": "next_steps", "title": "30-60-90 Day Actions", "content_focus": "Remediation actions over the next quarter.", "template_variant_key": "step_through_1" },
+        { "slide_role": "appendix_source_notes", "layout_id": "next_steps", "title": "Appendix: Source Notes", "content_focus": "Source data and generation controls.", "template_variant_key": "step_through_3" }
+      ]
+    },
+    {
+      "recipe_id": "ad_hoc_brand_safe_deck",
+      "name": "Ad Hoc Brand-Safe Deck",
+      "mode": "ad_hoc_blueprint",
+      "description": "Flexible request path for creator prompts that do not match a predefined report, while still using only approved layout IDs.",
+      "audience": "Prompt-selected audience, constrained by approved brand templates",
+      "intent_keywords": ["ad hoc", "custom", "bespoke", "one-off", "different audience", "new topic"],
+      "slide_sequence": [
+        { "slide_role": "title", "layout_id": "title_client_report", "title": "Brand-Safe Client Brief", "content_focus": "Client, period, and prompt-selected brief context.", "template_variant_key": "cover_minimal" },
+        { "slide_role": "agenda", "layout_id": "agenda", "title": "Briefing Flow", "content_focus": "Prompt priorities converted to approved sections." },
+        { "slide_role": "executive_summary", "layout_id": "executive_summary", "title": "Brief Summary", "content_focus": "Prompt-aligned summary without changing visual design." },
+        { "slide_role": "kpi_scorecard", "layout_id": "adoption_kpi_scorecard", "title": "Relevant Metrics", "content_focus": "Approved KPI scorecard adapted to the prompt.", "template_variant_key": "kpi_category_summary" },
+        { "slide_role": "usage_trend", "layout_id": "usage_trend", "title": "Signal Trend", "content_focus": "Available trend proof from structured data." },
+        { "slide_role": "risks_recommendations", "layout_id": "risks_recommendations", "title": "Implications & Recommendations", "content_focus": "Prompt-aligned risks and recommendations.", "template_variant_key": "risk_actions_3up" },
+        { "slide_role": "next_steps", "layout_id": "next_steps", "title": "Next Steps", "content_focus": "Actions that match the requested audience.", "template_variant_key": "step_through_2" },
+        { "slide_role": "appendix_source_notes", "layout_id": "next_steps", "title": "Appendix: Source Notes", "content_focus": "Source data and generation controls.", "template_variant_key": "step_through_3" }
+      ]
+    }
+  ]
+}

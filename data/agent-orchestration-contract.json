@@ -1,0 +1,76 @@
+{
+  "schema": "branddeck.agent-orchestration/v1",
+  "status": "future_openai_ready",
+  "principle": "AI may interpret intent, analyze sources, draft structured plans, and revise copy for fit. AI may not choose slide geometry, colors, fonts, logos, chart styling, asset placement, or PowerPoint object IDs.",
+  "required_inputs": [
+    "brand_contract",
+    "approved_layout_ids",
+    "template_object_map",
+    "layout_fit_budgets",
+    "source_pack",
+    "business_data",
+    "user_prompt"
+  ],
+  "handoff_sequence": [
+    {
+      "agent_id": "intent_router",
+      "name": "Intent Router",
+      "purpose": "Classify the requested deck type, audience, decision goal, and preferred approved recipe.",
+      "allowed_outputs": ["deck_type", "audience", "recipe_id", "missing_context_questions"],
+      "forbidden_outputs": ["layout geometry", "colors", "fonts", "asset choices"]
+    },
+    {
+      "agent_id": "source_analyst",
+      "name": "Source Analyst",
+      "purpose": "Review attached notes, docs, transcripts, and connector results as evidence for claims.",
+      "allowed_outputs": ["bounded_evidence", "risks", "recommendations", "source_refs"],
+      "forbidden_outputs": ["uncited claims", "new brand rules", "renderer instructions"]
+    },
+    {
+      "agent_id": "data_analyst",
+      "name": "Data Analyst",
+      "purpose": "Normalize CSV or connector data into metrics, deltas, trends, and proof points.",
+      "allowed_outputs": ["metric_facts", "trend_points", "calculation_notes"],
+      "forbidden_outputs": ["invented metrics", "visual encodings", "chart styling"]
+    },
+    {
+      "agent_id": "deck_planner",
+      "name": "Deck Planner",
+      "purpose": "Create a DeckPlanSchema response using only approved layout IDs and approved chart types.",
+      "allowed_outputs": ["DeckPlanSchema"],
+      "forbidden_outputs": ["unapproved layout IDs", "new placeholders", "PowerPoint object IDs"]
+    },
+    {
+      "agent_id": "fit_editor",
+      "name": "Fit Editor",
+      "purpose": "Rewrite generated copy to satisfy per-layout and per-object text budgets before export.",
+      "allowed_outputs": ["revised DeckPlanSchema", "fit_rationale"],
+      "forbidden_outputs": ["font resizing", "geometry changes", "new text boxes"]
+    },
+    {
+      "agent_id": "compliance_reviewer",
+      "name": "Compliance Reviewer",
+      "purpose": "Review validation, preflight, package audit, contrast, placeholders, and forbidden client-copy checks.",
+      "allowed_outputs": ["pass_fail_report", "blocking_issues", "safe_revision_requests"],
+      "forbidden_outputs": ["bypassing validation", "changing renderer output directly"]
+    }
+  ],
+  "deterministic_services": [
+    "validateDeckPlan",
+    "buildBrandPreflightReport",
+    "renderCloneEditedPptx",
+    "auditPptxPackage"
+  ],
+  "release_gates": [
+    "DeckPlanSchema parses",
+    "Every slide uses an approved layout ID",
+    "Required placeholders are populated",
+    "Text fits layout budgets",
+    "No forbidden client-copy phrases are present",
+    "Chart types are approved for the selected layout",
+    "Template frame map is approved",
+    "Object bindings are available for edited slides",
+    "Package audit has zero placeholder hits",
+    "Renderer uses inherited template objects only"
+  ]
+}

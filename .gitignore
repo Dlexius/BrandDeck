@@ -1,0 +1,12 @@
+node_modules/
+.next/
+out/
+outputs/
+dist/
+.branddeck-runtime/
+.env*
+!.env.example
+npm-debug.log*
+*.tsbuildinfo
+.DS_Store
+branddeck-studio-*.png

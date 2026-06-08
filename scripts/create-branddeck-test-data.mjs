@@ -1,0 +1,296 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { SpreadsheetFile, Workbook } from "@oai/artifact-tool";
+
+const headers = [
+  "client_name",
+  "report_period",
+  "active_users",
+  "licensed_users",
+  "adoption_score",
+  "projects_active",
+  "mobile_usage_rate",
+  "daily_logs_count",
+  "rfi_count",
+  "submittals_count",
+  "top_feature",
+  "lowest_feature",
+  "risk_summary",
+  "recommendation_1",
+  "recommendation_2",
+  "recommendation_3"
+];
+
+const rows = [
+  [
+    "Harborview Civil Partners",
+    "November 2025",
+    104,
+    285,
+    38,
+    12,
+    24,
+    418,
+    52,
+    79,
+    "Daily Logs",
+    "Submittals",
+    "Early usage is concentrated in field reporting while project management workflows remain inconsistent across active jobs.",
+    "Identify three lighthouse projects and publish role-specific adoption targets.",
+    "Run superintendent mobile enablement sessions for foremen and assistant supers.",
+    "Create a weekly review for overdue submittals and stalled RFI responses."
+  ],
+  [
+    "Harborview Civil Partners",
+    "December 2025",
+    123,
+    285,
+    44,
+    13,
+    29,
+    506,
+    67,
+    91,
+    "Daily Logs",
+    "Submittals",
+    "Mobile engagement improved, but office-side document workflows are not yet part of the project cadence.",
+    "Pair project engineers with high-adoption superintendents for two reporting cycles.",
+    "Add RFI and submittal aging views to the weekly operations meeting.",
+    "Review inactive licenses before the January project launches."
+  ],
+  [
+    "Harborview Civil Partners",
+    "January 2026",
+    146,
+    300,
+    51,
+    15,
+    35,
+    642,
+    83,
+    118,
+    "Daily Logs",
+    "Submittals",
+    "New project launches created more daily log activity, but submittal response ownership is still unclear.",
+    "Assign a document-control owner for projects over $20M.",
+    "Build saved views for overdue submittals and RFIs by project manager.",
+    "Make role-based onboarding required for all new active projects."
+  ],
+  [
+    "Harborview Civil Partners",
+    "February 2026",
+    169,
+    305,
+    58,
+    17,
+    42,
+    786,
+    104,
+    151,
+    "Daily Logs",
+    "Submittals",
+    "Adoption moved into healthier territory, but usage is uneven between highway and vertical project teams.",
+    "Run adoption score reviews by project type and region.",
+    "Have project executives sponsor the two lowest-usage teams.",
+    "Create a 30-day submittal response sprint with PM leadership."
+  ],
+  [
+    "Harborview Civil Partners",
+    "March 2026",
+    191,
+    315,
+    64,
+    19,
+    49,
+    934,
+    126,
+    181,
+    "RFIs",
+    "Submittals",
+    "RFI consistency improved, but subcontractor-facing document turnaround is still a schedule risk.",
+    "Standardize RFI and submittal saved views for every project kickoff.",
+    "Review subcontractor enablement gaps with field leadership.",
+    "Publish a weekly adoption leaderboard for active projects."
+  ],
+  [
+    "Harborview Civil Partners",
+    "April 2026",
+    213,
+    320,
+    69,
+    21,
+    55,
+    1098,
+    148,
+    224,
+    "RFIs",
+    "Submittals",
+    "The rollout is gaining momentum, but usage may plateau without executive governance and clear workflow owners.",
+    "Create a monthly executive adoption checkpoint with project sponsors.",
+    "Tie submittal response targets to project health reviews.",
+    "Refresh inactive-user cleanup before the next licensing review."
+  ],
+  [
+    "Harborview Civil Partners",
+    "May 2026",
+    232,
+    325,
+    73,
+    23,
+    59,
+    1226,
+    166,
+    263,
+    "RFIs",
+    "Submittals",
+    "Adoption is approaching healthy levels, but new project starts need a repeatable launch motion.",
+    "Codify the launch checklist for Procore workflows on every new project.",
+    "Assign one accountable owner for each workflow metric in the next 60 days.",
+    "Use coaching office hours for teams below the adoption benchmark."
+  ],
+  [
+    "Harborview Civil Partners",
+    "June 2026",
+    244,
+    325,
+    76,
+    24,
+    61,
+    1320,
+    182,
+    298,
+    "RFIs",
+    "Submittals",
+    "Adoption is healthy but still at risk of backsliding because submittal habits and new-project onboarding are not fully standardized.",
+    "Set a 90-day adoption governance cadence with executive sponsorship.",
+    "Launch a submittal response improvement plan for the five highest-volume projects.",
+    "Create role-based onboarding paths for project managers, superintendents, and project engineers."
+  ]
+];
+
+function csvEscape(value) {
+  const text = String(value ?? "");
+
+  if (/[",\n\r]/.test(text)) {
+    return `"${text.replaceAll('"', '""')}"`;
+  }
+
+  return text;
+}
+
+async function saveBlobLike(value, filePath) {
+  if (typeof value.save === "function") {
+    await value.save(filePath);
+    return;
+  }
+
+  if (value instanceof Uint8Array) {
+    await fs.writeFile(filePath, value);
+    return;
+  }
+
+  if (typeof value.arrayBuffer === "function") {
+    await fs.writeFile(filePath, Buffer.from(await value.arrayBuffer()));
+    return;
+  }
+
+  if (value?.bytes instanceof Uint8Array) {
+    await fs.writeFile(filePath, value.bytes);
+    return;
+  }
+
+  if (value?.data instanceof Uint8Array) {
+    await fs.writeFile(filePath, value.data);
+    return;
+  }
+
+  throw new Error(`Unsupported render output: ${value?.constructor?.name ?? typeof value}`);
+}
+
+const csvText = [headers, ...rows]
+  .map((row) => row.map(csvEscape).join(","))
+  .join("\n");
+
+const repoRoot = process.cwd();
+const dataPath = path.join(repoRoot, "data", "branddeck-test-client-adoption.csv");
+const downloadsPath = path.join(
+  os.homedir(),
+  "Downloads",
+  "BrandDeck_Test_Client_Adoption_Data.csv"
+);
+const outputDir = path.join(repoRoot, "outputs", "branddeck-test-data");
+const xlsxPath = path.join(outputDir, "BrandDeck_Test_Client_Adoption_Data.xlsx");
+const previewPath = path.join(outputDir, "BrandDeck_Test_Client_Adoption_Data.png");
+
+await fs.mkdir(path.dirname(dataPath), { recursive: true });
+await fs.mkdir(outputDir, { recursive: true });
+await fs.writeFile(dataPath, `${csvText}\n`, "utf8");
+await fs.writeFile(downloadsPath, `${csvText}\n`, "utf8");
+
+const workbook = await Workbook.fromCSV(csvText, {
+  sheetName: "Adoption Data"
+});
+const sheet = workbook.worksheets.getItem("Adoption Data");
+sheet.showGridLines = false;
+sheet.freezePanes.freezeRows(1);
+
+const usedRange = sheet.getRange("A1:P9");
+usedRange.format.wrapText = true;
+usedRange.format.borders = {
+  preset: "all",
+  style: "thin",
+  color: "#D7CABF"
+};
+
+const headerRange = sheet.getRange("A1:P1");
+headerRange.format.fill = { color: "#F3F3F3" };
+headerRange.format.font = { bold: true, color: "#111111" };
+headerRange.format.rowHeightPx = 34;
+
+sheet.getRange("A1:A9").format.columnWidthPx = 190;
+sheet.getRange("B1:B9").format.columnWidthPx = 120;
+sheet.getRange("C1:J9").format.columnWidthPx = 86;
+sheet.getRange("K1:L9").format.columnWidthPx = 110;
+sheet.getRange("M1:P9").format.columnWidthPx = 280;
+sheet.getRange("A2:P9").format.rowHeightPx = 72;
+
+const inspection = await workbook.inspect({
+  kind: "table",
+  range: "Adoption Data!A1:P9",
+  include: "values",
+  tableMaxRows: 9,
+  tableMaxCols: 16
+});
+const errors = await workbook.inspect({
+  kind: "match",
+  searchTerm: "#REF!|#DIV/0!|#VALUE!|#NAME\\?|#N/A",
+  options: { useRegex: true, maxResults: 20 },
+  summary: "formula error scan"
+});
+const preview = await workbook.render({
+  sheetName: "Adoption Data",
+  autoCrop: "all",
+  format: "png",
+  scale: 1
+});
+await saveBlobLike(preview, previewPath);
+const output = await SpreadsheetFile.exportXlsx(workbook);
+await output.save(xlsxPath);
+
+console.log(
+  JSON.stringify(
+    {
+      csvPath: dataPath,
+      downloadsPath,
+      xlsxPath,
+      previewPath,
+      rows: rows.length,
+      columns: headers.length,
+      inspection: inspection.ndjson.split("\n").slice(0, 3),
+      errors: errors.ndjson
+    },
+    null,
+    2
+  )
+);
