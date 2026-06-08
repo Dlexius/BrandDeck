@@ -3133,19 +3133,11 @@ function CompactDeckRecipePicker({
   onSelectedRecipeIdChange: (recipeId: string) => void;
 }) {
   const recipeLibrary = [...approvedDeckRecipes, ...customRecipes];
-  const selectedRecipe =
-    recipeLibrary.find((recipe) => recipe.recipe_id === selectedRecipeId) ??
-    (deckPlan?.deck_recipe_id
+  const generatedRecipe =
+    deckPlan?.deck_recipe_id
       ? recipeLibrary.find((recipe) => recipe.recipe_id === deckPlan.deck_recipe_id)
-      : undefined);
-  const selectedLabel =
-    selectedRecipeId === "auto"
-      ? "Auto-select from prompt"
-      : selectedRecipe?.name ?? "Selected recipe";
-  const selectedDescription =
-    selectedRecipeId === "auto"
-      ? "BrandDeck will choose the best approved structure after it reads the prompt."
-      : selectedRecipe?.description ?? "Approved brand-safe deck structure.";
+      : undefined;
+  const autoSelected = selectedRecipeId === "auto";
 
   return (
     <Card>
@@ -3155,78 +3147,91 @@ function CompactDeckRecipePicker({
             Deck Type
           </h2>
           <p className="mt-1 text-sm text-[#787E89]">
-            Leave this on auto unless the audience needs a specific preset.
+            Choose auto-selection or one approved preset for this deck.
           </p>
         </div>
         <div className="rounded-sm bg-[#F3F3F3] px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] text-brand-ink">
           {recipeLibrary.length} approved
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <label className="block">
-          <span className="mb-2 block text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
-            Structure
-          </span>
-          <select
-            value={selectedRecipeId}
-            onChange={(event) => onSelectedRecipeIdChange(event.target.value)}
-            className="h-11 w-full rounded-md border border-[#D7CABF] bg-white px-3 text-sm font-semibold text-brand-ink shadow-sm outline-none transition focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/20"
+      <CardContent>
+        <div className="grid gap-3 md:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => onSelectedRecipeIdChange("auto")}
+            className={`rounded-md border px-4 py-3 text-left transition ${
+              autoSelected
+                ? "border-brand-orange bg-[#FFF7F2] shadow-sm"
+                : "border-[#E5E0DB] bg-white hover:border-[#D7CABF]"
+            }`}
           >
-            <option value="auto">Auto-select from prompt</option>
-            {recipeLibrary.map((recipe) => (
-              <option key={recipe.recipe_id} value={recipe.recipe_id}>
-                {recipe.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <div className="rounded-md border border-[#EFEAE5] bg-[#FBFAF9] px-4 py-3">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-sm font-black text-brand-charcoal">
-                {selectedLabel}
-              </p>
-              <p className="mt-1 text-xs font-semibold leading-5 text-[#787E89]">
-                {selectedDescription}
-              </p>
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-black text-brand-charcoal">
+                  Auto-select from prompt
+                </p>
+                <p className="mt-1 text-xs font-semibold leading-5 text-[#787E89]">
+                  BrandDeck chooses the best approved structure after it reads the
+                  request.
+                </p>
+              </div>
+              <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-brand-orange" />
             </div>
-            <Layers3 className="mt-0.5 h-4 w-4 shrink-0 text-brand-orange" />
-          </div>
-          {selectedRecipe && (
             <p className="mt-3 text-xs font-bold text-brand-ink">
-              Starts with {selectedRecipe.slide_sequence.length} slides; expands
-              with context when the source pack supports it.
+              {generatedRecipe && autoSelected
+                ? `Generated with ${generatedRecipe.name}`
+                : "Recommended for most decks"}
             </p>
-          )}
-        </div>
+          </button>
 
-        <details className="rounded-md border border-[#EFEAE5] bg-white px-4 py-3">
-          <summary className="cursor-pointer text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
-            View preset library
-          </summary>
-          <div className="mt-3 grid gap-2 md:grid-cols-2">
-            {recipeLibrary.map((recipe) => (
+          {recipeLibrary.map((recipe) => {
+            const isSelected = selectedRecipeId === recipe.recipe_id;
+            const isCustom = recipe.recipe_id.startsWith("admin_custom_");
+
+            return (
               <button
                 key={recipe.recipe_id}
                 type="button"
                 onClick={() => onSelectedRecipeIdChange(recipe.recipe_id)}
-                className={`rounded-md border px-3 py-2 text-left transition ${
-                  selectedRecipeId === recipe.recipe_id
-                    ? "border-brand-orange bg-[#FFF7F2]"
-                    : "border-[#EFEAE5] bg-white hover:border-[#D7CABF]"
+                className={`rounded-md border px-4 py-3 text-left transition ${
+                  isSelected
+                    ? "border-brand-orange bg-[#FFF7F2] shadow-sm"
+                    : "border-[#E5E0DB] bg-white hover:border-[#D7CABF]"
                 }`}
               >
-                <p className="truncate text-xs font-black text-brand-charcoal">
-                  {recipe.name}
-                </p>
-                <p className="mt-1 truncate text-[11px] font-semibold text-[#787E89]">
-                  {recipe.slide_sequence.length} starting slides
-                </p>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-black text-brand-charcoal">
+                      {recipe.name}
+                    </p>
+                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#787E89]">
+                      {recipe.description}
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 rounded-sm px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] ${
+                      isCustom
+                        ? "bg-[#FFF1E8] text-[#6B2A00]"
+                        : recipe.mode === "predefined"
+                          ? "bg-[#F3F3F3] text-brand-ink"
+                          : "bg-[#111111] text-white"
+                    }`}
+                  >
+                    {isCustom
+                      ? "Admin"
+                      : recipe.mode === "predefined"
+                        ? "Preset"
+                        : "Ad hoc"}
+                  </span>
+                </div>
+                <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-brand-ink">
+                  <Layers3 className="h-3.5 w-3.5 text-brand-orange" />
+                  Starts with {recipe.slide_sequence.length} slides
+                </div>
               </button>
-            ))}
-          </div>
-        </details>
+            );
+          })}
+        </div>
       </CardContent>
     </Card>
   );
@@ -3662,6 +3667,19 @@ export default function Home() {
     setValidationReport(null);
     setAccuracyAudit(null);
     setExportCertificate(null);
+  }
+
+  function handleStartOver() {
+    setPrompt(DEFAULT_PROMPT);
+    setSelectedRecipeId("auto");
+    setCsvRows([]);
+    setCsvFileName("No CSV loaded");
+    setSourceDocuments([]);
+    setSourceNotes("");
+    resetGeneratedDeck();
+    setActiveCreatorStep("brief");
+    setWorkspaceView("generate");
+    setNotice("Started a new deck. Brand settings and saved templates are unchanged.");
   }
 
   function ingestCsv(csvText: string, fileName: string) {
@@ -4911,6 +4929,8 @@ export default function Home() {
     "--brand-fog":
       activeBrandContract.approved_color_tokens.light_gray ?? "#F3F3F3"
   } as CSSProperties;
+  const workflowBusy =
+    generating || preparingExport || auditingExport || exporting;
   const showExportRail =
     workspaceView === "settings" ||
     (workspaceView === "generate" &&
@@ -4982,41 +5002,54 @@ export default function Home() {
 
         <section className="min-w-0 bg-[#FBFAF9] px-6 py-6 xl:px-10">
           <div className="mx-auto max-w-5xl space-y-6">
-            <div>
-              <h1 className="text-3xl font-black tracking-normal text-brand-charcoal">
-                {workspaceView === "generate"
-                  ? "Generate Presentation"
-                  : "Brand Settings"}
-              </h1>
-              <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-[#787E89]">
-                {workspaceView === "generate"
-                  ? "Describe the deck you need, add relevant context, and BrandDeck will prepare a brand-governed export without letting prompts change the visual system."
-                  : "Admins maintain the brand contract, approved templates, object maps, assets, and deck recipes that keep every generated presentation on brand."}
-              </p>
-              {workspaceView === "settings" && (
-                <div className="mt-5 grid gap-3 text-sm font-semibold text-[#787E89] md:grid-cols-3">
-                  {["Upload Brand Kit", "Map Objects", "Publish Controls"].map(
-                    (step, index) => (
-                      <div key={step} className="flex items-center gap-3">
-                        <span
-                          className={`grid h-7 w-7 place-items-center rounded-full text-xs font-black ${
-                            index === 0
-                              ? "bg-brand-orange text-white"
-                              : "bg-white text-[#787E89] ring-1 ring-[#D7CABF]"
-                          }`}
-                        >
-                          {index + 1}
-                        </span>
-                        <span className="text-brand-ink">{step}</span>
-                        {index < 2 && (
-                          <span className="hidden h-px flex-1 bg-[#D7CABF] md:block" />
-                        )}
-                      </div>
-                    )
-                  )}
-                </div>
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h1 className="text-3xl font-black tracking-normal text-brand-charcoal">
+                  {workspaceView === "generate"
+                    ? "Generate Presentation"
+                    : "Brand Settings"}
+                </h1>
+                <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-[#787E89]">
+                  {workspaceView === "generate"
+                    ? "Describe the deck you need, add relevant context, and BrandDeck will prepare a brand-governed export without letting prompts change the visual system."
+                    : "Admins maintain the brand contract, approved templates, object maps, assets, and deck recipes that keep every generated presentation on brand."}
+                </p>
+              </div>
+              {workspaceView === "generate" && (
+                <Button
+                  variant="secondary"
+                  className="w-full shrink-0 sm:w-auto"
+                  onClick={handleStartOver}
+                  disabled={workflowBusy}
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Start Over
+                </Button>
               )}
             </div>
+            {workspaceView === "settings" && (
+              <div className="grid gap-3 text-sm font-semibold text-[#787E89] md:grid-cols-3">
+                {["Upload Brand Kit", "Map Objects", "Publish Controls"].map(
+                  (step, index) => (
+                    <div key={step} className="flex items-center gap-3">
+                      <span
+                        className={`grid h-7 w-7 place-items-center rounded-full text-xs font-black ${
+                          index === 0
+                            ? "bg-brand-orange text-white"
+                            : "bg-white text-[#787E89] ring-1 ring-[#D7CABF]"
+                        }`}
+                      >
+                        {index + 1}
+                      </span>
+                      <span className="text-brand-ink">{step}</span>
+                      {index < 2 && (
+                        <span className="hidden h-px flex-1 bg-[#D7CABF] md:block" />
+                      )}
+                    </div>
+                  )
+                )}
+              </div>
+            )}
 
             {workspaceView === "settings" ? (
               <>
@@ -5144,6 +5177,12 @@ export default function Home() {
                   dataReady={dataReady}
                   deckReady={deckReady}
                 />
+
+                {notice && activeCreatorStep !== "export" && (
+                  <div className="rounded-md border border-[#D7CABF] bg-white px-4 py-3 text-sm font-semibold text-brand-ink">
+                    {notice}
+                  </div>
+                )}
 
                 {activeCreatorStep === "brief" && (
                   <div key="brief" className="workflow-step-panel space-y-4">

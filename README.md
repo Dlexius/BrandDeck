@@ -137,3 +137,17 @@ A verified sample export that opens cleanly in PowerPoint is available at:
 ```text
 /Users/dshed/Downloads/Summit_Ridge_Constructors_June_2026_adoption_report_v4_template_coordinate.pptx
 ```
+
+## Quality Gates
+
+Run the deterministic export quality suite before changing planner, renderer,
+asset, recipe, or validation logic:
+
+```bash
+npm run test:quality
+```
+
+The suite verifies that brand-contract assets exist, every approved deck recipe
+generates a valid and data-accurate plan, fallback PPTX exports embed brand
+media, package audits catch broken exports, and internal/model copy is rejected
+before export.
