@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import Papa from "papaparse";
 import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
   Download,
+  ExternalLink,
   FileArchive,
   FileCheck2,
   FileSpreadsheet,
@@ -17,11 +17,14 @@ import {
   Loader2,
   Lock,
   Palette,
+  Presentation,
   RotateCcw,
+  Search,
   ShieldCheck,
   Sparkles,
   Type,
-  Upload
+  Upload,
+  X
 } from "lucide-react";
 import brandContractData from "@/data/brand-contract.json";
 import { Button } from "@/components/ui/button";
@@ -35,6 +38,7 @@ import type {
   DeckPlan,
   SourceDocument
 } from "@/lib/deck-plan-schema";
+import { MAX_SOURCE_DOCUMENT_CHARS } from "@/lib/deck-plan-schema";
 import type { DeckAccuracyAudit } from "@/lib/auditDeckAccuracy";
 import { approvedDeckRecipes } from "@/lib/deck-recipes";
 import type { ValidationReport } from "@/lib/validateDeckPlan";
@@ -44,7 +48,177 @@ import type { DeckRecipe } from "@/lib/deck-recipes";
 const defaultBrandContract = brandContractData as unknown as BrandContract;
 
 const DEFAULT_PROMPT =
-  "Create an executive adoption report for the client in the loaded business data. Emphasize usage growth, mobile adoption, feature adoption gaps, risks, and practical next steps for the next 90 days.";
+  "Create an executive adoption report for the client in the account snapshot. Emphasize usage growth, mobile adoption, feature adoption gaps, risks, and practical next steps for the next 90 days.";
+
+type BusinessSnapshotState = {
+  client_name: string;
+  report_period: string;
+  previous_report_period: string;
+  active_users: string;
+  licensed_users: string;
+  adoption_score: string;
+  previous_active_users: string;
+  previous_adoption_score: string;
+  projects_active: string;
+  mobile_usage_rate: string;
+  previous_mobile_usage_rate: string;
+  daily_logs_count: string;
+  rfi_count: string;
+  submittals_count: string;
+  top_feature: string;
+  lowest_feature: string;
+  risk_summary: string;
+  recommendation_1: string;
+  recommendation_2: string;
+  recommendation_3: string;
+};
+
+type ClientProfile = {
+  id: string;
+  name: string;
+  segment: string;
+  stage: string;
+  tools: string[];
+  focus: string;
+  snapshot: BusinessSnapshotState;
+  context: string;
+};
+
+const EMPTY_BUSINESS_SNAPSHOT: BusinessSnapshotState = {
+  client_name: "",
+  report_period: "",
+  previous_report_period: "",
+  active_users: "",
+  licensed_users: "",
+  adoption_score: "",
+  previous_active_users: "",
+  previous_adoption_score: "",
+  projects_active: "",
+  mobile_usage_rate: "",
+  previous_mobile_usage_rate: "",
+  daily_logs_count: "",
+  rfi_count: "",
+  submittals_count: "",
+  top_feature: "",
+  lowest_feature: "",
+  risk_summary: "",
+  recommendation_1: "",
+  recommendation_2: "",
+  recommendation_3: ""
+};
+
+const EXAMPLE_BUSINESS_SNAPSHOT: BusinessSnapshotState = {
+  client_name: "Harborview Civil Partners",
+  report_period: "June 2026",
+  previous_report_period: "May 2026",
+  active_users: "244",
+  licensed_users: "325",
+  adoption_score: "76",
+  previous_active_users: "213",
+  previous_adoption_score: "73",
+  projects_active: "24",
+  mobile_usage_rate: "61",
+  previous_mobile_usage_rate: "59",
+  daily_logs_count: "1840",
+  rfi_count: "286",
+  submittals_count: "350",
+  top_feature: "Daily Logs",
+  lowest_feature: "Submittals",
+  risk_summary:
+    "Submittal response ownership is inconsistent across project teams, which is slowing closeout confidence for executive sponsors.",
+  recommendation_1:
+    "Assign a named workflow owner before the next executive checkpoint.",
+  recommendation_2:
+    "Review submittal response targets in weekly project health meetings.",
+  recommendation_3:
+    "Reinforce mobile daily log habits with field supervisors."
+};
+
+const CLIENT_PROFILES: ClientProfile[] = [
+  {
+    id: "harborview",
+    name: "Harborview Civil Partners",
+    segment: "Civil infrastructure",
+    stage: "Expansion account",
+    tools: ["Project Management", "RFIs", "Submittals", "Daily Logs", "Mobile"],
+    focus: "Stabilize submittal ownership and reinforce mobile field habits.",
+    snapshot: EXAMPLE_BUSINESS_SNAPSHOT,
+    context:
+      "Client profile: Harborview Civil Partners is a civil infrastructure contractor using Project Management, RFIs, Submittals, Daily Logs, Documents, and Mobile. Business goal: protect margin by shortening submittal response cycles and making daily log habits repeatable across active projects. Risk: submittal response ownership is inconsistent across project teams. Trend note: mobile adoption improved but field leaders still need role-based coaching. Recommendation: position product update content around Submittals, Daily Logs, and Mobile workflows already deployed for the client."
+  },
+  {
+    id: "summit-ridge",
+    name: "Summit Ridge Constructors",
+    segment: "Commercial general contractor",
+    stage: "Renewal planning",
+    tools: ["Core Tools", "Documents", "Budget", "Commitments", "Analytics"],
+    focus: "Connect adoption gains to executive renewal and cost-control outcomes.",
+    snapshot: {
+      client_name: "Summit Ridge Constructors",
+      report_period: "Q2 2026",
+      previous_report_period: "Q1 2026",
+      active_users: "418",
+      licensed_users: "520",
+      adoption_score: "81",
+      previous_active_users: "372",
+      previous_adoption_score: "74",
+      projects_active: "41",
+      mobile_usage_rate: "68",
+      previous_mobile_usage_rate: "61",
+      daily_logs_count: "3920",
+      rfi_count: "512",
+      submittals_count: "680",
+      top_feature: "Documents",
+      lowest_feature: "Budget",
+      risk_summary:
+        "Budget and commitments workflows lag behind field and document adoption, limiting the renewal value story.",
+      recommendation_1:
+        "Tie the next business review to budget accuracy, commitments visibility, and project controls outcomes.",
+      recommendation_2:
+        "Run a project-controls enablement sprint for regional operations leaders.",
+      recommendation_3:
+        "Use executive dashboards to show adoption impact before renewal planning."
+    },
+    context:
+      "Client profile: Summit Ridge Constructors is a commercial GC using Core Tools, Documents, Budget, Commitments, and Analytics. Business goal: connect adoption to renewal value, cost-control visibility, and project controls maturity. Risk: Budget and Commitments adoption trails field workflows. Trend note: document and mobile usage are strong, but project controls workflows need executive reinforcement. Recommendation: for QBR decks, emphasize value realized, renewal readiness, Budget/Commitments enablement, and executive dashboard adoption."
+  },
+  {
+    id: "northstar",
+    name: "Northstar Utilities Group",
+    segment: "Energy and utilities",
+    stage: "New product rollout",
+    tools: ["Quality & Safety", "Inspections", "Observations", "Forms", "Analytics"],
+    focus: "Target product updates to quality, safety, and field inspection workflows.",
+    snapshot: {
+      client_name: "Northstar Utilities Group",
+      report_period: "July 2026",
+      previous_report_period: "June 2026",
+      active_users: "186",
+      licensed_users: "260",
+      adoption_score: "69",
+      previous_active_users: "151",
+      previous_adoption_score: "58",
+      projects_active: "18",
+      mobile_usage_rate: "72",
+      previous_mobile_usage_rate: "63",
+      daily_logs_count: "1240",
+      rfi_count: "144",
+      submittals_count: "198",
+      top_feature: "Inspections",
+      lowest_feature: "Forms",
+      risk_summary:
+        "Teams are engaged in inspections, but form standardization and closeout consistency remain uneven.",
+      recommendation_1:
+        "Anchor the rollout around inspection templates and supervisor review routines.",
+      recommendation_2:
+        "Introduce forms updates only with workflow-specific field examples.",
+      recommendation_3:
+        "Measure adoption by region and inspection type before the next product review."
+    },
+    context:
+      "Client profile: Northstar Utilities Group uses Quality & Safety, Inspections, Observations, Forms, and Analytics. Business goal: standardize field quality processes while preserving fast mobile execution. Risk: forms and closeout routines are not consistent by region. Trend note: mobile and inspection adoption are rising, which creates a good entry point for product update messaging. Recommendation: product update decks should connect new Forms, Inspections, and Analytics capabilities to the tools Northstar already owns."
+  }
+];
 
 type TemplateKitSummary = {
   id: string;
@@ -183,6 +357,7 @@ const CORE_BRAND_COLOR_TOKENS = [
   "medium_gray",
   "light_gray"
 ];
+const MAX_ADMIN_RECIPE_LAYOUTS = 24;
 
 function brandColorTokenLabel(token: string) {
   return token.replaceAll("_", " ");
@@ -194,6 +369,77 @@ function isHexColor(value: string) {
 
 type SourceDocumentSummary = SourceDocument & {
   characters: number;
+};
+
+type GoogleDriveConnectorStatus = {
+  configured: boolean;
+  connected: boolean;
+  scopes?: string[];
+  redirectUri?: string;
+  connectedAt?: string;
+  updatedAt?: string;
+  expiresAt?: string | null;
+  error?: string;
+};
+
+type GoogleDriveFileOption = {
+  id: string;
+  name: string;
+  mimeType: string;
+  typeLabel: string;
+  webViewLink?: string;
+  modifiedTime?: string;
+};
+
+type GoogleWorkspaceFileType = "all" | "document" | "spreadsheet" | "presentation";
+
+type GoogleWorkspaceSourceType = Exclude<GoogleWorkspaceFileType, "all">;
+
+const GOOGLE_WORKSPACE_SOURCE_TYPES: Array<{
+  type: GoogleWorkspaceSourceType;
+  name: string;
+  repoLabel: string;
+  detail: string;
+  logoUrl: string;
+  searchPlaceholder: string;
+  emptyState: string;
+}> = [
+  {
+    type: "document",
+    name: "Google Docs",
+    repoLabel: "Docs repo",
+    detail: "Briefs, meeting notes, success plans, and account narratives",
+    logoUrl: "/connector-logos/googledocs.svg",
+    searchPlaceholder: "Search Docs for QBR notes, account briefs, or meeting recaps",
+    emptyState: "Search for a customer brief, QBR narrative, meeting recap, or implementation plan."
+  },
+  {
+    type: "spreadsheet",
+    name: "Google Sheets",
+    repoLabel: "Sheets repo",
+    detail: "Metrics, scorecards, adoption snapshots, and workflow signals",
+    logoUrl: "/connector-logos/googlesheets.svg",
+    searchPlaceholder: "Search Sheets for metrics, scorecards, or account snapshots",
+    emptyState: "Search for adoption metrics, product usage, risk scoring, or account snapshots."
+  },
+  {
+    type: "presentation",
+    name: "Google Slides",
+    repoLabel: "Slides repo",
+    detail: "Existing decks, product updates, QBRs, and approved narratives",
+    logoUrl: "/connector-logos/googleslides.svg",
+    searchPlaceholder: "Search Slides for product updates, QBRs, or prior decks",
+    emptyState: "Search for product update decks, business reviews, kickoff decks, or narrative examples."
+  }
+];
+
+function googleWorkspaceSourceType(type: GoogleWorkspaceSourceType) {
+  return GOOGLE_WORKSPACE_SOURCE_TYPES.find((sourceType) => sourceType.type === type);
+}
+
+type GoogleDriveImportResponse = {
+  documents?: SourceDocumentSummary[];
+  error?: string;
 };
 
 type BrandContractApiResponse = {
@@ -228,7 +474,7 @@ const CREATOR_WORKFLOW_STEPS: Array<{
   {
     id: "context",
     title: "Add Context",
-    detail: "Data and sources"
+    detail: "Metrics and sources"
   },
   {
     id: "export",
@@ -292,28 +538,91 @@ type GeneratePlanApiResponse = {
   deckPlan?: DeckPlan;
   validationReport?: ValidationReport;
   accuracyAudit?: DeckAccuracyAudit;
+  planningMode?:
+    | "deterministic"
+    | "openai_structured_outputs"
+    | "openai_fallback_deterministic";
+  plannerModel?: string;
+  plannerFallbackReason?: string;
   error?: string;
 };
 
-function parseCsv(csvText: string) {
-  const result = Papa.parse<AdoptionCsvRow>(csvText, {
-    header: true,
-    skipEmptyLines: true,
-    dynamicTyping: true,
-    transformHeader: (header) => header.trim()
-  });
+function cleanSnapshotValue(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
 
-  if (result.errors.length > 0) {
-    throw new Error(result.errors[0]?.message ?? "CSV parsing failed.");
+function hasBusinessSnapshotMinimum(snapshot: BusinessSnapshotState) {
+  return Boolean(
+    cleanSnapshotValue(snapshot.client_name) &&
+      cleanSnapshotValue(snapshot.report_period) &&
+      cleanSnapshotValue(snapshot.active_users) &&
+      cleanSnapshotValue(snapshot.licensed_users) &&
+      cleanSnapshotValue(snapshot.adoption_score)
+  );
+}
+
+function businessSnapshotToRows(
+  snapshot: BusinessSnapshotState
+): AdoptionCsvRow[] {
+  if (!hasBusinessSnapshotMinimum(snapshot)) {
+    return [];
   }
 
-  const rows = result.data.filter((row) => row.client_name && row.report_period);
+  const clientName = cleanSnapshotValue(snapshot.client_name);
+  const reportPeriod = cleanSnapshotValue(snapshot.report_period);
+  const activeUsers = cleanSnapshotValue(snapshot.active_users);
+  const licensedUsers = cleanSnapshotValue(snapshot.licensed_users);
+  const adoptionScore = cleanSnapshotValue(snapshot.adoption_score);
+  const projectsActive = cleanSnapshotValue(snapshot.projects_active);
+  const mobileUsageRate = cleanSnapshotValue(snapshot.mobile_usage_rate);
+  const dailyLogsCount = cleanSnapshotValue(snapshot.daily_logs_count);
+  const rfiCount = cleanSnapshotValue(snapshot.rfi_count);
+  const submittalsCount = cleanSnapshotValue(snapshot.submittals_count);
+  const topFeature = cleanSnapshotValue(snapshot.top_feature);
+  const lowestFeature = cleanSnapshotValue(snapshot.lowest_feature);
+  const riskSummary = cleanSnapshotValue(snapshot.risk_summary);
+  const recommendation1 = cleanSnapshotValue(snapshot.recommendation_1);
+  const recommendation2 = cleanSnapshotValue(snapshot.recommendation_2);
+  const recommendation3 = cleanSnapshotValue(snapshot.recommendation_3);
 
-  if (rows.length === 0) {
-    throw new Error("CSV must include at least one populated adoption row.");
+  const currentRow: AdoptionCsvRow = {
+    client_name: clientName,
+    report_period: reportPeriod,
+    active_users: activeUsers,
+    licensed_users: licensedUsers,
+    adoption_score: adoptionScore,
+    projects_active: projectsActive,
+    mobile_usage_rate: mobileUsageRate,
+    daily_logs_count: dailyLogsCount,
+    rfi_count: rfiCount,
+    submittals_count: submittalsCount,
+    top_feature: topFeature,
+    lowest_feature: lowestFeature,
+    risk_summary: riskSummary,
+    recommendation_1: recommendation1,
+    recommendation_2: recommendation2,
+    recommendation_3: recommendation3
+  };
+
+  const priorPeriod = cleanSnapshotValue(snapshot.previous_report_period);
+  const priorAdoption = cleanSnapshotValue(snapshot.previous_adoption_score);
+  const priorUsers = cleanSnapshotValue(snapshot.previous_active_users);
+  const priorMobile = cleanSnapshotValue(snapshot.previous_mobile_usage_rate);
+
+  if (!priorPeriod && !priorAdoption && !priorUsers && !priorMobile) {
+    return [currentRow];
   }
 
-  return rows;
+  return [
+    {
+      ...currentRow,
+      report_period: priorPeriod || `Prior ${reportPeriod}`,
+      active_users: priorUsers || activeUsers,
+      adoption_score: priorAdoption || adoptionScore,
+      mobile_usage_rate: priorMobile || mobileUsageRate
+    },
+    currentRow
+  ];
 }
 
 function formatBytes(bytes: number) {
@@ -329,7 +638,10 @@ function createSourceDocument(
   text: string,
   type: SourceDocument["type"] = "document"
 ): SourceDocumentSummary {
-  const normalizedText = text.replace(/\s+/g, " ").trim().slice(0, 12000);
+  const normalizedText = text
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, MAX_SOURCE_DOCUMENT_CHARS);
 
   return {
     id: `${name}-${normalizedText.length}-${Date.now()}`.replace(
@@ -393,7 +705,7 @@ function recipeFromBuilder(
   const recipeId = existing.has(recipeIdBase)
     ? `${recipeIdBase}_${Date.now().toString(36).slice(-5)}`
     : recipeIdBase;
-  const layoutIds = builder.layoutIds.slice(0, 12);
+  const layoutIds = builder.layoutIds.slice(0, MAX_ADMIN_RECIPE_LAYOUTS);
   const keywords = builder.keywords
     .split(",")
     .map((keyword) => keyword.trim())
@@ -487,7 +799,7 @@ function CreatorWorkflowProgress({
     }
 
     if (step === "context") {
-      return <FileSpreadsheet className="h-4 w-4" />;
+      return <FileArchive className="h-4 w-4" />;
     }
 
     return <FileCheck2 className="h-4 w-4" />;
@@ -781,13 +1093,6 @@ function ValidationPanel({
           )}
         </div>
 
-        <div className="rounded-md bg-[#FFF1E8] px-4 py-3 text-xs font-semibold leading-5 text-[#6B2A00]">
-          <div className="mb-1 flex items-center gap-2 font-bold text-[#4B1F00]">
-            <AlertTriangle className="h-4 w-4" />
-            Local MVP Notice
-          </div>
-          Uses local data and deterministic rules. No live systems are connected.
-        </div>
       </div>
     </aside>
   );
@@ -809,7 +1114,7 @@ function BrandKitReadiness({
       label: "Template",
       value: templateKit
         ? `${templateKit.slideCount} slides indexed`
-        : "Procore default active",
+        : "Default template active",
       icon: FileArchive
     },
     {
@@ -823,7 +1128,7 @@ function BrandKitReadiness({
       label: "Assets",
       value: templateKit
         ? `${templateKit.mediaCount} template media + ${brandAssets.length} uploaded`
-        : "Approved Procore assets loaded",
+        : "Approved brand assets loaded",
       icon: ImageIcon
     },
     {
@@ -843,7 +1148,7 @@ function BrandKitReadiness({
           <p className="mt-1 text-sm text-[#787E89]">
             {templateKit
               ? `Locked to ${templateKit.templateName}`
-              : "Using the bundled Procore template contract"}
+              : "Using the bundled template contract"}
           </p>
         </div>
         <span className="rounded-sm bg-[#F3F3F3] px-2 py-1 font-mono text-xs font-semibold text-brand-ink">
@@ -1249,14 +1554,14 @@ function TemplateOnboardingWorkbench({
 function ConnectorReadinessPanel() {
   const connectors = [
     {
-      name: "CSV Upload",
+      name: "Account Metrics",
       status: "Ready",
-      detail: "Manual structured business data"
+      detail: "Manual snapshot or connector-fed metrics"
     },
     {
       name: "Source Context",
       status: "Ready",
-      detail: "Local docs, briefs, notes, transcripts"
+      detail: "Docs, briefs, notes, transcripts"
     },
     {
       name: "Cloud Drives",
@@ -1266,7 +1571,7 @@ function ConnectorReadinessPanel() {
     {
       name: "Business Systems",
       status: "Planned",
-      detail: "Procore, Salesforce, CS, BI exports"
+      detail: "CRM, customer success, product usage, and BI exports"
     }
   ];
 
@@ -1278,8 +1583,8 @@ function ConnectorReadinessPanel() {
             Data & Context Connectors
           </h2>
           <p className="mt-1 text-sm text-[#787E89]">
-            CSV is the MVP business-data input. Cloud documents and connected
-            systems will feed the same governed planner.
+            Account metrics and source context feed the governed planner. Cloud
+            documents and connected systems can use the same contract.
           </p>
         </div>
         <div className="rounded-md bg-[#F3F3F3] px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] text-brand-ink">
@@ -1501,7 +1806,7 @@ function TemplateGovernancePanel({
     governance.summary.bindingSource === "admin_import"
       ? "Admin imported"
       : governance.summary.bindingSource === "built_in_procore"
-        ? "Built-in Procore"
+        ? "Built-in template map"
         : "Needs import";
 
   return (
@@ -2953,7 +3258,7 @@ function AdminRecipeBuilder({
                 <button
                   key={layout.layout_id}
                   type="button"
-                  disabled={builder.layoutIds.length >= 12}
+                  disabled={builder.layoutIds.length >= MAX_ADMIN_RECIPE_LAYOUTS}
                   onClick={() => onAddLayout(layout.layout_id)}
                   className="flex w-full items-center justify-between gap-3 rounded-md border border-[#E5E0DB] bg-white px-3 py-2 text-left text-xs font-bold text-brand-charcoal transition hover:border-brand-orange disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -2967,8 +3272,8 @@ function AdminRecipeBuilder({
 
         <div className="flex flex-col gap-3 border-t border-[#E5E0DB] pt-4 md:flex-row md:items-center md:justify-between">
           <div className="text-xs font-semibold leading-5 text-[#787E89]">
-            Custom recipes are saved to local runtime storage. Exported
-            manifests still prove the selected deck used approved layout IDs.
+            Custom recipes are saved to workspace storage. Exported manifests
+            still prove the selected deck used approved layout IDs.
           </div>
           <Button onClick={onCreateRecipe}>
             <ShieldCheck className="h-4 w-4" />
@@ -3108,8 +3413,8 @@ function DeckRecipePanel({
                   </div>
                   <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-brand-ink">
                     <Layers3 className="h-3.5 w-3.5 text-brand-orange" />
-                    Starts with {recipe.slide_sequence.length} slides; expands with
-                    context
+                    Baseline {recipe.slide_sequence.length} slides; expands with
+                    context and meeting length
                   </div>
                 </button>
               );
@@ -3226,7 +3531,7 @@ function CompactDeckRecipePicker({
                 </div>
                 <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-brand-ink">
                   <Layers3 className="h-3.5 w-3.5 text-brand-orange" />
-                  Starts with {recipe.slide_sequence.length} slides
+                  Baseline {recipe.slide_sequence.length} slides; expands with context
                 </div>
               </button>
             );
@@ -3237,14 +3542,185 @@ function CompactDeckRecipePicker({
   );
 }
 
-function BusinessDataCard({
-  kpiSummary,
-  loadingSample,
-  generating,
-  preparingExport,
-  onLoadSample,
-  onUpload
+function SnapshotInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  inputMode = "text",
+  disabled = false
 }: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  inputMode?: "text" | "numeric" | "decimal";
+  disabled?: boolean;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.08em] text-brand-charcoal">
+        {label}
+      </span>
+      <Input
+        value={value}
+        inputMode={inputMode}
+        disabled={disabled}
+        placeholder={placeholder}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  );
+}
+
+function SnapshotTextarea({
+  label,
+  value,
+  onChange,
+  placeholder,
+  disabled = false
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.08em] text-brand-charcoal">
+        {label}
+      </span>
+      <Textarea
+        value={value}
+        disabled={disabled}
+        placeholder={placeholder}
+        className="min-h-[86px]"
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  );
+}
+
+function ClientProfilePanel({
+  selectedProfileId,
+  profileContext,
+  workflowBusy,
+  onSelectProfile,
+  onProfileContextChange,
+  onClearProfile
+}: {
+  selectedProfileId: string;
+  profileContext: string;
+  workflowBusy: boolean;
+  onSelectProfile: (profileId: string) => void;
+  onProfileContextChange: (value: string) => void;
+  onClearProfile: () => void;
+}) {
+  const selectedProfile = CLIENT_PROFILES.find(
+    (profile) => profile.id === selectedProfileId
+  );
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-col items-stretch justify-between gap-4 sm:flex-row sm:items-center">
+        <div>
+          <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
+            Client Profile
+          </h2>
+          <p className="mt-1 text-sm text-[#787E89]">
+            Reuse known tools, priorities, and account context so every deck
+            stays continuous.
+          </p>
+        </div>
+        {selectedProfile && (
+          <Button
+            variant="secondary"
+            className="w-full sm:w-auto"
+            onClick={onClearProfile}
+            disabled={workflowBusy}
+          >
+            Clear Profile
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 md:grid-cols-3">
+          {CLIENT_PROFILES.map((profile) => {
+            const isSelected = profile.id === selectedProfileId;
+
+            return (
+              <button
+                key={profile.id}
+                type="button"
+                disabled={workflowBusy}
+                onClick={() => onSelectProfile(profile.id)}
+                className={`rounded-md border px-4 py-3 text-left transition ${
+                  isSelected
+                    ? "border-brand-orange bg-[#FFF7F2] shadow-sm"
+                    : "border-[#E5E0DB] bg-white hover:border-[#D7CABF]"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-black text-brand-charcoal">
+                      {profile.name}
+                    </p>
+                    <p className="mt-1 text-xs font-semibold text-[#787E89]">
+                      {profile.segment} | {profile.stage}
+                    </p>
+                  </div>
+                  {isSelected && (
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#188038]" />
+                  )}
+                </div>
+                <p className="mt-3 line-clamp-2 text-xs font-semibold leading-5 text-brand-ink">
+                  {profile.focus}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {profile.tools.slice(0, 4).map((tool) => (
+                    <span
+                      key={tool}
+                      className="rounded-sm bg-[#F3F3F3] px-2 py-1 text-[10px] font-bold text-[#787E89]"
+                    >
+                      {tool}
+                    </span>
+                  ))}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <label className="block">
+          <span className="mb-2 block text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
+            Continuity Context
+          </span>
+          <Textarea
+            value={profileContext}
+            disabled={workflowBusy}
+            placeholder="Add client tools, purchased modules, goals, rollout status, renewal context, stakeholders, or product areas this deck should account for."
+            className="min-h-[118px]"
+            onChange={(event) => onProfileContextChange(event.target.value)}
+          />
+          <p className="mt-2 text-xs font-semibold leading-5 text-[#787E89]">
+            This becomes planner evidence for the client, not a visual design
+            instruction.
+          </p>
+        </label>
+      </CardContent>
+    </Card>
+  );
+}
+
+function BusinessDataCard({
+  businessSnapshot,
+  kpiSummary,
+  workflowBusy,
+  onSnapshotChange,
+  onUseExample
+}: {
+  businessSnapshot: BusinessSnapshotState;
   kpiSummary: {
     client?: string;
     period?: string;
@@ -3252,53 +3728,220 @@ function BusinessDataCard({
     licensedUsers: number;
     adoptionScore: number;
   } | null;
-  loadingSample: boolean;
-  generating: boolean;
-  preparingExport: boolean;
-  onLoadSample: () => void;
-  onUpload: (file: File | null) => void;
+  workflowBusy: boolean;
+  onSnapshotChange: (field: keyof BusinessSnapshotState, value: string) => void;
+  onUseExample: () => void;
 }) {
+  const update =
+    (field: keyof BusinessSnapshotState) => (value: string) =>
+      onSnapshotChange(field, value);
+
   return (
     <Card>
       <CardHeader className="flex flex-col items-stretch justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
-            Business Data
+            Metrics Snapshot
           </h2>
           <p className="mt-1 text-sm text-[#787E89]">
-            Add the metrics BrandDeck should ground the presentation in.
+            Confirm the few numbers needed to ground the deck. Everything else
+            can stay optional.
           </p>
         </div>
         <Button
           variant="secondary"
           className="w-full sm:w-auto"
-          onClick={onLoadSample}
-          disabled={loadingSample || generating || preparingExport}
+          onClick={onUseExample}
+          disabled={workflowBusy}
         >
-          {loadingSample ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <FileSpreadsheet className="h-4 w-4" />
-          )}
-          Load Test CSV
+          <Sparkles className="h-4 w-4" />
+          Use Example Metrics
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_240px]">
-          <label className="block">
-            <span className="mb-2 block text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
-              CSV Upload
-            </span>
-            <Input
-              type="file"
-              accept=".csv,text/csv"
-              onChange={(event) => onUpload(event.currentTarget.files?.[0] ?? null)}
-            />
-            <span className="mt-2 block text-xs font-semibold leading-5 text-[#787E89]">
-              CSV is the MVP input. Future connectors can feed this same data
-              slot.
-            </span>
-          </label>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-3">
+              <SnapshotInput
+                label="Client"
+                value={businessSnapshot.client_name}
+                disabled={workflowBusy}
+                placeholder="Harborview Civil Partners"
+                onChange={update("client_name")}
+              />
+              <SnapshotInput
+                label="Current Period"
+                value={businessSnapshot.report_period}
+                disabled={workflowBusy}
+                placeholder="June 2026"
+                onChange={update("report_period")}
+              />
+              <SnapshotInput
+                label="Adoption Score"
+                value={businessSnapshot.adoption_score}
+                inputMode="numeric"
+                disabled={workflowBusy}
+                placeholder="76"
+                onChange={update("adoption_score")}
+              />
+              <SnapshotInput
+                label="Active Users"
+                value={businessSnapshot.active_users}
+                inputMode="numeric"
+                disabled={workflowBusy}
+                placeholder="244"
+                onChange={update("active_users")}
+              />
+              <SnapshotInput
+                label="Licensed Users"
+                value={businessSnapshot.licensed_users}
+                inputMode="numeric"
+                disabled={workflowBusy}
+                placeholder="325"
+                onChange={update("licensed_users")}
+              />
+              <SnapshotInput
+                label="Active Projects"
+                value={businessSnapshot.projects_active}
+                inputMode="numeric"
+                disabled={workflowBusy}
+                placeholder="24"
+                onChange={update("projects_active")}
+              />
+            </div>
+
+            <details className="rounded-md border border-[#E5E0DB] bg-white px-4 py-3">
+              <summary className="cursor-pointer text-sm font-black text-brand-charcoal">
+                Trend baseline and mobile usage
+              </summary>
+              <div className="mt-4 grid gap-3 md:grid-cols-4">
+                <SnapshotInput
+                  label="Prior Period"
+                  value={businessSnapshot.previous_report_period}
+                  disabled={workflowBusy}
+                  placeholder="May 2026"
+                  onChange={update("previous_report_period")}
+                />
+                <SnapshotInput
+                  label="Prior Adoption"
+                  value={businessSnapshot.previous_adoption_score}
+                  inputMode="numeric"
+                  disabled={workflowBusy}
+                  placeholder="73"
+                  onChange={update("previous_adoption_score")}
+                />
+                <SnapshotInput
+                  label="Prior Users"
+                  value={businessSnapshot.previous_active_users}
+                  inputMode="numeric"
+                  disabled={workflowBusy}
+                  placeholder="213"
+                  onChange={update("previous_active_users")}
+                />
+                <SnapshotInput
+                  label="Mobile Usage"
+                  value={businessSnapshot.mobile_usage_rate}
+                  inputMode="numeric"
+                  disabled={workflowBusy}
+                  placeholder="61"
+                  onChange={update("mobile_usage_rate")}
+                />
+                <SnapshotInput
+                  label="Prior Mobile"
+                  value={businessSnapshot.previous_mobile_usage_rate}
+                  inputMode="numeric"
+                  disabled={workflowBusy}
+                  placeholder="59"
+                  onChange={update("previous_mobile_usage_rate")}
+                />
+              </div>
+            </details>
+
+            <details className="rounded-md border border-[#E5E0DB] bg-white px-4 py-3">
+              <summary className="cursor-pointer text-sm font-black text-brand-charcoal">
+                Workflow signals
+              </summary>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <SnapshotInput
+                  label="Daily Logs"
+                  value={businessSnapshot.daily_logs_count}
+                  inputMode="numeric"
+                  disabled={workflowBusy}
+                  placeholder="1840"
+                  onChange={update("daily_logs_count")}
+                />
+                <SnapshotInput
+                  label="RFIs"
+                  value={businessSnapshot.rfi_count}
+                  inputMode="numeric"
+                  disabled={workflowBusy}
+                  placeholder="286"
+                  onChange={update("rfi_count")}
+                />
+                <SnapshotInput
+                  label="Submittals"
+                  value={businessSnapshot.submittals_count}
+                  inputMode="numeric"
+                  disabled={workflowBusy}
+                  placeholder="350"
+                  onChange={update("submittals_count")}
+                />
+                <SnapshotInput
+                  label="Top Workflow"
+                  value={businessSnapshot.top_feature}
+                  disabled={workflowBusy}
+                  placeholder="Daily Logs"
+                  onChange={update("top_feature")}
+                />
+                <SnapshotInput
+                  label="Lowest Workflow"
+                  value={businessSnapshot.lowest_feature}
+                  disabled={workflowBusy}
+                  placeholder="Submittals"
+                  onChange={update("lowest_feature")}
+                />
+              </div>
+            </details>
+
+            <details className="rounded-md border border-[#E5E0DB] bg-white px-4 py-3">
+              <summary className="cursor-pointer text-sm font-black text-brand-charcoal">
+                Risks and actions
+              </summary>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <SnapshotTextarea
+                  label="Risk Summary"
+                  value={businessSnapshot.risk_summary}
+                  disabled={workflowBusy}
+                  placeholder="What should the deck call out?"
+                  onChange={update("risk_summary")}
+                />
+                <div className="space-y-3">
+                  <SnapshotInput
+                    label="Recommendation 1"
+                    value={businessSnapshot.recommendation_1}
+                    disabled={workflowBusy}
+                    placeholder="Assign a workflow owner"
+                    onChange={update("recommendation_1")}
+                  />
+                  <SnapshotInput
+                    label="Recommendation 2"
+                    value={businessSnapshot.recommendation_2}
+                    disabled={workflowBusy}
+                    placeholder="Review response targets weekly"
+                    onChange={update("recommendation_2")}
+                  />
+                  <SnapshotInput
+                    label="Recommendation 3"
+                    value={businessSnapshot.recommendation_3}
+                    disabled={workflowBusy}
+                    placeholder="Reinforce field habits"
+                    onChange={update("recommendation_3")}
+                  />
+                </div>
+              </div>
+            </details>
+          </div>
+
           <div
             className={`border-l-2 px-4 py-3 transition ${
               kpiSummary
@@ -3307,16 +3950,23 @@ function BusinessDataCard({
             }`}
           >
             <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#787E89]">
-              Current Data
+              Current Snapshot
             </p>
             <p className="mt-2 text-sm font-bold text-brand-charcoal">
-              {kpiSummary ? kpiSummary.client : "No client loaded"}
+              {kpiSummary ? kpiSummary.client : "Add account details"}
             </p>
             <p className="mt-1 text-xs font-semibold leading-5 text-[#787E89]">
               {kpiSummary
                 ? `${kpiSummary.period} | ${kpiSummary.activeUsers}/${kpiSummary.licensedUsers} users | ${kpiSummary.adoptionScore}% score`
-                : "Load a CSV to continue"}
+                : "Client, period, active users, licensed users, and adoption score are required."}
             </p>
+            <div className="mt-4 space-y-2 border-t border-[#E5E0DB] pt-3 text-xs font-semibold leading-5 text-[#787E89]">
+              <p>Client profiles and source notes can enrich the plan.</p>
+              <p>
+                BrandDeck uses these values as evidence while the brand contract
+                controls layout and visual decisions.
+              </p>
+            </div>
           </div>
         </div>
       </CardContent>
@@ -3324,25 +3974,518 @@ function BusinessDataCard({
   );
 }
 
-function ConnectorMiniNote() {
+function GoogleWorkspaceSourcePickerModal({
+  activeSourceType,
+  googleDriveStatus,
+  googleDriveQuery,
+  googleDriveResults,
+  selectedGoogleDriveFileIds,
+  searchingGoogleDrive,
+  importingGoogleDrive,
+  onClose,
+  onConnectGoogleDrive,
+  onGoogleDriveQueryChange,
+  onSearchGoogleDrive,
+  onToggleGoogleDriveFile,
+  onImportGoogleDriveFiles
+}: {
+  activeSourceType: GoogleWorkspaceSourceType | null;
+  googleDriveStatus: GoogleDriveConnectorStatus | null;
+  googleDriveQuery: string;
+  googleDriveResults: GoogleDriveFileOption[];
+  selectedGoogleDriveFileIds: string[];
+  searchingGoogleDrive: boolean;
+  importingGoogleDrive: boolean;
+  onClose: () => void;
+  onConnectGoogleDrive: () => void;
+  onGoogleDriveQueryChange: (value: string) => void;
+  onSearchGoogleDrive: () => void;
+  onToggleGoogleDriveFile: (fileId: string) => void;
+  onImportGoogleDriveFiles: () => void;
+}) {
+  if (!activeSourceType) {
+    return null;
+  }
+
+  const sourceType = googleWorkspaceSourceType(activeSourceType);
+
+  if (!sourceType) {
+    return null;
+  }
+
+  const googleDriveConfigured = googleDriveStatus?.configured ?? false;
+  const googleDriveConnected = googleDriveStatus?.connected ?? false;
+  const selectedCount = selectedGoogleDriveFileIds.length;
+  const SourceIcon =
+    activeSourceType === "spreadsheet"
+      ? FileSpreadsheet
+      : activeSourceType === "presentation"
+        ? Presentation
+        : FileText;
+
   return (
-    <div className="flex flex-col gap-3 rounded-md border border-[#EFEAE5] bg-white px-4 py-3 text-sm font-semibold text-brand-ink md:flex-row md:items-center md:justify-between">
-      <div className="flex items-start gap-3">
-        <FileArchive className="mt-0.5 h-4 w-4 shrink-0 text-brand-orange" />
-        <div>
-          <p className="font-bold text-brand-charcoal">
-            Connector-ready context slot
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${sourceType.name} source picker`}
+    >
+      <div className="workflow-soft-raise flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl ring-1 ring-black/10">
+        <div className="flex items-start justify-between gap-4 border-b border-[#E5E0DB] px-5 py-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-[#F3F3F3] ring-1 ring-[#EFEAE5]">
+              <img
+                src={sourceType.logoUrl}
+                alt={`${sourceType.name} logo`}
+                className="h-7 w-7 object-contain"
+              />
+            </span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg font-black text-brand-charcoal">
+                  Select {sourceType.name}
+                </h2>
+                <span className="rounded-sm bg-[#F3F3F3] px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-brand-ink">
+                  {sourceType.repoLabel}
+                </span>
+              </div>
+              <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-[#787E89]">
+                Choose trusted files to use as source context. BrandDeck extracts
+                evidence from the content while the brand contract keeps slide
+                design locked.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-[#787E89] transition hover:bg-[#F3F3F3] hover:text-brand-charcoal"
+            onClick={onClose}
+            aria-label="Close source picker"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto px-5 py-4">
+          {!googleDriveConfigured ? (
+            <div className="rounded-md border border-[#FFD3BE] bg-[#FFF7F2] px-4 py-4 text-sm font-semibold leading-6 text-[#69707D]">
+              Google OAuth credentials are required before BrandDeck can search
+              this repository.
+            </div>
+          ) : !googleDriveConnected ? (
+            <div className="grid gap-4 rounded-md border border-[#E5E0DB] bg-[#FCFBFA] p-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+              <div>
+                <p className="text-sm font-black text-brand-charcoal">
+                  Connect Google Drive first
+                </p>
+                <p className="mt-1 text-xs font-semibold leading-5 text-[#787E89]">
+                  Docs, Sheets, and Slides are selected through the Drive
+                  connector so permissions stay centralized.
+                </p>
+              </div>
+              <Button className="h-10 px-4" onClick={onConnectGoogleDrive}>
+                Connect Google Drive
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#787E89]" />
+                  <Input
+                    value={googleDriveQuery}
+                    onChange={(event) =>
+                      onGoogleDriveQueryChange(event.currentTarget.value)
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        onSearchGoogleDrive();
+                      }
+                    }}
+                    placeholder={sourceType.searchPlaceholder}
+                    className="pl-9"
+                    disabled={searchingGoogleDrive || importingGoogleDrive}
+                  />
+                </div>
+                <Button
+                  variant="secondary"
+                  className="h-10 px-4"
+                  onClick={onSearchGoogleDrive}
+                  disabled={searchingGoogleDrive || importingGoogleDrive}
+                >
+                  {searchingGoogleDrive ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Search className="h-4 w-4" />
+                  )}
+                  {searchingGoogleDrive ? "Searching" : "Search"}
+                </Button>
+              </div>
+
+              {googleDriveResults.length === 0 ? (
+                <div className="rounded-md border border-dashed border-[#D7CABF] bg-[#FCFBFA] px-4 py-8 text-center">
+                  <SourceIcon className="mx-auto h-8 w-8 text-[#787E89]" />
+                  <p className="mt-3 text-sm font-black text-brand-charcoal">
+                    No {sourceType.name} selected yet
+                  </p>
+                  <p className="mx-auto mt-1 max-w-md text-xs font-semibold leading-5 text-[#787E89]">
+                    {sourceType.emptyState}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {googleDriveResults.map((file) => {
+                    const selected = selectedGoogleDriveFileIds.includes(file.id);
+
+                    return (
+                      <button
+                        key={file.id}
+                        type="button"
+                        onClick={() => onToggleGoogleDriveFile(file.id)}
+                        className={`w-full rounded-md border px-3 py-3 text-left transition ${
+                          selected
+                            ? "border-brand-orange bg-[#FFF7F2]"
+                            : "border-[#E5E0DB] bg-white hover:bg-[#FCFBFA]"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span
+                            className={`grid h-9 w-9 shrink-0 place-items-center rounded-md ${
+                              selected
+                                ? "bg-brand-orange text-white"
+                                : "bg-[#F3F3F3] text-brand-ink"
+                            }`}
+                          >
+                            <SourceIcon className="h-4 w-4" />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-bold text-brand-charcoal">
+                                  {file.name}
+                                </p>
+                                <p className="mt-1 text-xs font-semibold text-[#787E89]">
+                                  {file.typeLabel}
+                                  {file.modifiedTime
+                                    ? ` | Modified ${new Date(file.modifiedTime).toLocaleDateString()}`
+                                    : ""}
+                                </p>
+                              </div>
+                              <span
+                                className={`shrink-0 rounded-sm px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] ${
+                                  selected
+                                    ? "bg-brand-orange text-white"
+                                    : "bg-[#F3F3F3] text-brand-ink"
+                                }`}
+                              >
+                                {selected ? "Selected" : "Select"}
+                              </span>
+                            </div>
+                            {file.webViewLink && (
+                              <a
+                                href={file.webViewLink}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-brand-orange"
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                Open source
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-[#E5E0DB] bg-[#FCFBFA] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs font-semibold text-[#787E89]">
+            {selectedCount} file{selectedCount === 1 ? "" : "s"} selected
           </p>
-          <p className="mt-1 text-xs leading-5 text-[#787E89]">
-            Google Drive, OneDrive, Dropbox, Procore, Salesforce, and BI exports
-            can plug into this same step later.
-          </p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button
+              variant="secondary"
+              className="h-10 px-4"
+              onClick={onClose}
+              disabled={importingGoogleDrive}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="h-10 px-4"
+              onClick={onImportGoogleDriveFiles}
+              disabled={
+                !googleDriveConnected ||
+                selectedCount === 0 ||
+                importingGoogleDrive
+              }
+            >
+              {importingGoogleDrive ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FileCheck2 className="h-4 w-4" />
+              )}
+              {importingGoogleDrive ? "Attaching" : "Attach Sources"}
+            </Button>
+          </div>
         </div>
       </div>
-      <span className="shrink-0 rounded-sm bg-[#F3F3F3] px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-brand-ink">
-        Local MVP
-      </span>
     </div>
+  );
+}
+
+function ConnectedContextPanel({
+  googleDriveStatus,
+  activeGoogleSourceType,
+  googleDriveQuery,
+  googleDriveResults,
+  selectedGoogleDriveFileIds,
+  searchingGoogleDrive,
+  importingGoogleDrive,
+  onOpenGoogleSourcePicker,
+  onCloseGoogleSourcePicker,
+  onConnectGoogleDrive,
+  onDisconnectGoogleDrive,
+  onGoogleDriveQueryChange,
+  onSearchGoogleDrive,
+  onToggleGoogleDriveFile,
+  onImportGoogleDriveFiles
+}: {
+  googleDriveStatus: GoogleDriveConnectorStatus | null;
+  activeGoogleSourceType: GoogleWorkspaceSourceType | null;
+  googleDriveQuery: string;
+  googleDriveResults: GoogleDriveFileOption[];
+  selectedGoogleDriveFileIds: string[];
+  searchingGoogleDrive: boolean;
+  importingGoogleDrive: boolean;
+  onOpenGoogleSourcePicker: (sourceType: GoogleWorkspaceSourceType) => void;
+  onCloseGoogleSourcePicker: () => void;
+  onConnectGoogleDrive: () => void;
+  onDisconnectGoogleDrive: () => void;
+  onGoogleDriveQueryChange: (value: string) => void;
+  onSearchGoogleDrive: () => void;
+  onToggleGoogleDriveFile: (fileId: string) => void;
+  onImportGoogleDriveFiles: () => void;
+}) {
+  const googleDriveConfigured = googleDriveStatus?.configured ?? false;
+  const googleDriveConnected = googleDriveStatus?.connected ?? false;
+  const futureConnectors = [
+    {
+      name: "Dropbox",
+      detail: "Shared files and account folders",
+      logoUrl: "/connector-logos/dropbox.svg"
+    },
+    {
+      name: "Box",
+      detail: "Governed folders and enterprise content",
+      logoUrl: "/connector-logos/box.svg"
+    },
+    {
+      name: "Salesforce",
+      detail: "Renewals, opportunities, and stakeholder context",
+      logoUrl: "/connector-logos/salesforce.svg"
+    },
+    {
+      name: "GitHub",
+      detail: "Product repositories, release notes, and roadmap issues",
+      logoUrl: "/connector-logos/github.svg"
+    }
+  ];
+
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
+            Connected Context
+          </h2>
+          <p className="mt-1 text-sm text-[#787E89]">
+            Connect files and systems that already hold the client story.
+            BrandDeck turns them into governed context for the deck plan.
+          </p>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+          <div className="rounded-md border border-[#E5E0DB] bg-white p-4">
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-[#F3F3F3] ring-1 ring-[#EFEAE5]">
+                <img
+                  src="/connector-logos/googledrive.svg"
+                  alt="Google Drive logo"
+                  className="h-6 w-6 object-contain"
+                  loading="lazy"
+                />
+              </span>
+              <div>
+                <p className="text-sm font-black text-brand-charcoal">
+                  Google Drive
+                </p>
+                <p className="mt-1 max-w-2xl text-xs font-semibold leading-5 text-[#787E89]">
+                  Centralized access for Google Docs, Sheets, and Slides. Source
+                  selection happens from the file-type cards below.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <span
+                    className={`w-fit rounded-sm px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] ${
+                      googleDriveConnected
+                        ? "bg-brand-orange text-white"
+                        : "bg-[#F3F3F3] text-brand-ink"
+                    }`}
+                  >
+                    {googleDriveConnected ? "Connected" : "Not connected"}
+                  </span>
+                  {!googleDriveConfigured && (
+                    <span className="w-fit rounded-sm bg-[#FFF7F2] px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-[#B43C00]">
+                      Needs credentials
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-md border border-[#E5E0DB] bg-[#FCFBFA] p-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#787E89]">
+              Connection
+            </p>
+            {googleDriveConnected ? (
+              <Button
+                variant="secondary"
+                className="mt-3 w-full"
+                onClick={onDisconnectGoogleDrive}
+                disabled={searchingGoogleDrive || importingGoogleDrive}
+              >
+                Disconnect
+              </Button>
+            ) : (
+              <Button
+                className="mt-3 w-full"
+                onClick={onConnectGoogleDrive}
+                disabled={!googleDriveConfigured}
+              >
+                Connect
+              </Button>
+            )}
+            <p className="mt-3 text-xs font-semibold leading-5 text-[#787E89]">
+              Drive permissions power the source pickers without giving prompts
+              control over brand design.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          {GOOGLE_WORKSPACE_SOURCE_TYPES.map((sourceType) => {
+            const SourceIcon =
+              sourceType.type === "spreadsheet"
+                ? FileSpreadsheet
+                : sourceType.type === "presentation"
+                  ? Presentation
+                  : FileText;
+
+            return (
+              <button
+                key={sourceType.type}
+                type="button"
+                onClick={() => onOpenGoogleSourcePicker(sourceType.type)}
+                disabled={!googleDriveConnected}
+                className="group rounded-md border border-[#E5E0DB] bg-white p-4 text-left transition hover:border-brand-orange hover:bg-[#FFF7F2] disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:border-[#E5E0DB] disabled:hover:bg-white"
+              >
+                <div className="flex h-full flex-col justify-between gap-5">
+                  <div className="flex items-start gap-3">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-[#F3F3F3] ring-1 ring-[#EFEAE5]">
+                      <img
+                        src={sourceType.logoUrl}
+                        alt={`${sourceType.name} logo`}
+                        className="h-6 w-6 object-contain"
+                        loading="lazy"
+                      />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-black leading-5 text-brand-charcoal">
+                        {sourceType.name}
+                      </p>
+                      <p className="mt-1 text-xs font-semibold leading-5 text-[#787E89]">
+                        {sourceType.detail}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="inline-flex items-center gap-1.5 rounded-sm bg-[#F3F3F3] px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-brand-ink">
+                      <SourceIcon className="h-3 w-3" />
+                      {googleDriveConnected ? "Browse" : "Connect first"}
+                    </span>
+                    <ArrowRight className="h-4 w-4 text-[#787E89] transition group-hover:translate-x-0.5 group-hover:text-brand-orange" />
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-4">
+          {futureConnectors.map((connector) => (
+            <div
+              key={connector.name}
+              className="rounded-md border border-[#E5E0DB] bg-[#FCFBFA] p-3"
+            >
+              <div className="flex items-start gap-2">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white ring-1 ring-[#EFEAE5]">
+                  <img
+                    src={connector.logoUrl}
+                    alt={`${connector.name} logo`}
+                    className="h-5 w-5 object-contain"
+                    loading="lazy"
+                  />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs font-black text-brand-charcoal">
+                    {connector.name}
+                  </p>
+                  <p className="mt-1 text-[11px] font-semibold leading-4 text-[#787E89]">
+                    {connector.detail}
+                  </p>
+                </div>
+              </div>
+              <span className="mt-3 inline-flex rounded-sm bg-[#F3F3F3] px-2 py-1 text-[9px] font-black uppercase tracking-[0.08em] text-brand-ink">
+                Next
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <GoogleWorkspaceSourcePickerModal
+          activeSourceType={activeGoogleSourceType}
+          googleDriveStatus={googleDriveStatus}
+          googleDriveQuery={googleDriveQuery}
+          googleDriveResults={googleDriveResults}
+          selectedGoogleDriveFileIds={selectedGoogleDriveFileIds}
+          searchingGoogleDrive={searchingGoogleDrive}
+          importingGoogleDrive={importingGoogleDrive}
+          onClose={onCloseGoogleSourcePicker}
+          onConnectGoogleDrive={onConnectGoogleDrive}
+          onGoogleDriveQueryChange={onGoogleDriveQueryChange}
+          onSearchGoogleDrive={onSearchGoogleDrive}
+          onToggleGoogleDriveFile={onToggleGoogleDriveFile}
+          onImportGoogleDriveFiles={onImportGoogleDriveFiles}
+        />
+
+        <div className="flex items-start gap-2 rounded-md bg-white px-3 py-2 text-xs font-semibold leading-5 text-[#787E89] ring-1 ring-[#EFEAE5]">
+          <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-orange" />
+          <span>
+            Connected sources can shape claims, recommendations, and source
+            references. The active brand contract still controls layouts,
+            colors, typography, and asset placement.
+          </span>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -3371,10 +4514,10 @@ function SourcePackPanel({
       <CardHeader className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
-            Source Context
+            Manual Context
           </h2>
           <p className="mt-1 text-sm text-[#787E89]">
-            Add the supporting context that should shape claims, risks, and
+            Add one-off notes or files that should shape claims, risks, and
             recommendations.
           </p>
         </div>
@@ -3398,8 +4541,8 @@ function SourcePackPanel({
               />
             </label>
             <p className="mt-3 text-xs font-semibold leading-5 text-[#787E89]">
-              Supports text, notes, and markdown today. Drive, OneDrive, and
-              Dropbox can plug into this same context slot later.
+              Useful for meeting notes, briefs, transcripts, and source excerpts
+              that are not yet connected.
             </p>
           </div>
 
@@ -3416,7 +4559,7 @@ function SourcePackPanel({
             />
             <div className="mt-2 flex items-center justify-between text-xs font-medium text-[#787E89]">
               <span>
-                {totalCharacters.toLocaleString()} characters reviewed locally
+                {totalCharacters.toLocaleString()} characters available
               </span>
               <span>{sourceNotes.length} / 4000</span>
             </div>
@@ -3479,10 +4622,24 @@ export default function Home() {
   const [customRecipes, setCustomRecipes] = useState<DeckRecipe[]>([]);
   const [recipeBuilder, setRecipeBuilder] =
     useState<RecipeBuilderState>(DEFAULT_RECIPE_BUILDER);
+  const [businessSnapshot, setBusinessSnapshot] =
+    useState<BusinessSnapshotState>(EMPTY_BUSINESS_SNAPSHOT);
+  const [selectedClientProfileId, setSelectedClientProfileId] = useState("");
+  const [clientProfileContext, setClientProfileContext] = useState("");
   const [csvRows, setCsvRows] = useState<AdoptionCsvRow[]>([]);
-  const [csvFileName, setCsvFileName] = useState("No CSV loaded");
   const [sourceDocuments, setSourceDocuments] = useState<SourceDocumentSummary[]>([]);
   const [sourceNotes, setSourceNotes] = useState("");
+  const [googleDriveStatus, setGoogleDriveStatus] =
+    useState<GoogleDriveConnectorStatus | null>(null);
+  const [activeGoogleSourceType, setActiveGoogleSourceType] =
+    useState<GoogleWorkspaceSourceType | null>(null);
+  const [googleDriveQuery, setGoogleDriveQuery] = useState("");
+  const [googleDriveResults, setGoogleDriveResults] = useState<
+    GoogleDriveFileOption[]
+  >([]);
+  const [selectedGoogleDriveFileIds, setSelectedGoogleDriveFileIds] = useState<
+    string[]
+  >([]);
   const [deckPlan, setDeckPlan] = useState<DeckPlan | null>(null);
   const [validationReport, setValidationReport] =
     useState<ValidationReport | null>(null);
@@ -3494,10 +4651,10 @@ export default function Home() {
     defaultBrandContract.template_source?.name ?? "No template selected"
   );
   const [templateStatus, setTemplateStatus] = useState(
-    "Active renderer uses the approved Procore 2025 contract."
+    "Active renderer uses the approved template contract."
   );
   const [workspaceStatus, setWorkspaceStatus] = useState(
-    "Local runtime persistence is enabled for uploaded templates and governed assets."
+    "Workspace persistence is enabled for uploaded templates and governed assets."
   );
   const [templateKit, setTemplateKit] = useState<TemplateKitSummary | null>(null);
   const [templateGovernance, setTemplateGovernance] =
@@ -3509,8 +4666,9 @@ export default function Home() {
   const [assetUploading, setAssetUploading] = useState(false);
   const [updatingAssetId, setUpdatingAssetId] = useState("");
   const [notice, setNotice] = useState("");
-  const [loadingSample, setLoadingSample] = useState(false);
   const [ingestingSources, setIngestingSources] = useState(false);
+  const [searchingGoogleDrive, setSearchingGoogleDrive] = useState(false);
+  const [importingGoogleDrive, setImportingGoogleDrive] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [preparingExport, setPreparingExport] = useState(false);
   const [auditingExport, setAuditingExport] = useState(false);
@@ -3596,7 +4754,7 @@ export default function Home() {
           setTemplateKit(restoredTemplate);
           setTemplateFileName(restoredTemplate.templateName);
           setTemplateStatus(
-            `Restored ${restoredTemplate.slideCount} slides, ${restoredTemplate.layoutCount} layouts, and ${restoredTemplate.mediaCount} media assets from local runtime storage.`
+            `Restored ${restoredTemplate.slideCount} slides, ${restoredTemplate.layoutCount} layouts, and ${restoredTemplate.mediaCount} media assets from workspace storage.`
           );
           await refreshTemplateGovernance(restoredTemplate.id, deckPlan);
           await refreshBrandPreflight(restoredTemplate.id, deckPlan);
@@ -3604,19 +4762,36 @@ export default function Home() {
 
         setWorkspaceStatus(
           restoredTemplate || restoredAssets.length > 0 || restoredRecipes.length > 0
-            ? `Restored ${restoredTemplate ? "1 template kit" : "0 template kits"}, ${restoredAssets.length} governed asset${restoredAssets.length === 1 ? "" : "s"}, and ${restoredRecipes.length} custom recipe${restoredRecipes.length === 1 ? "" : "s"} from local runtime storage.`
-            : "Local runtime persistence is ready. Uploaded templates and governed assets will be restored after server restarts."
+            ? `Restored ${restoredTemplate ? "1 template kit" : "0 template kits"}, ${restoredAssets.length} governed asset${restoredAssets.length === 1 ? "" : "s"}, and ${restoredRecipes.length} custom recipe${restoredRecipes.length === 1 ? "" : "s"} from workspace storage.`
+            : "Workspace persistence is ready. Uploaded templates and governed assets will be restored after server restarts."
         );
       } catch {
         if (!cancelled) {
           setWorkspaceStatus(
-            "Local runtime persistence is available, but no saved workspace could be restored."
+            "Workspace persistence is available, but no saved workspace could be restored."
           );
         }
       }
     }
 
     restoreLocalWorkspace();
+    refreshGoogleDriveStatus();
+
+    const connectorParams = new URLSearchParams(window.location.search);
+    if (connectorParams.get("connector") === "google-drive") {
+      setWorkspaceView("generate");
+      setActiveCreatorStep("context");
+
+      if (connectorParams.get("connector_status") === "connected") {
+        setNotice("Google Drive connected. Search for source files to attach.");
+      } else if (connectorParams.get("connector_error")) {
+        setNotice(
+          `Google Drive connection failed: ${connectorParams.get("connector_error")}`
+        );
+      }
+
+      window.history.replaceState({}, "", window.location.pathname);
+    }
 
     return () => {
       cancelled = true;
@@ -3660,7 +4835,9 @@ export default function Home() {
     deckPlan && validationReport?.passed && accuracyAudit?.passed
   );
   const sourceContextCount =
-    sourceDocuments.length + (sourceNotes.trim() ? 1 : 0);
+    sourceDocuments.length +
+    (sourceNotes.trim() ? 1 : 0) +
+    (clientProfileContext.trim() ? 1 : 0);
 
   function resetGeneratedDeck() {
     setDeckPlan(null);
@@ -3669,55 +4846,232 @@ export default function Home() {
     setExportCertificate(null);
   }
 
-  function handleStartOver() {
-    setPrompt(DEFAULT_PROMPT);
-    setSelectedRecipeId("auto");
-    setCsvRows([]);
-    setCsvFileName("No CSV loaded");
-    setSourceDocuments([]);
-    setSourceNotes("");
-    resetGeneratedDeck();
-    setActiveCreatorStep("brief");
-    setWorkspaceView("generate");
-    setNotice("Started a new deck. Brand settings and saved templates are unchanged.");
+  async function refreshGoogleDriveStatus() {
+    try {
+      const response = await fetch("/api/connectors/google-drive/status");
+      const result = (await response.json()) as GoogleDriveConnectorStatus;
+
+      setGoogleDriveStatus(result);
+    } catch {
+      setGoogleDriveStatus({
+        configured: false,
+        connected: false,
+        error: "Unable to read Google Drive connector status."
+      });
+    }
   }
 
-  function ingestCsv(csvText: string, fileName: string) {
-    const rows = parseCsv(csvText);
-    setCsvRows(rows);
-    setCsvFileName(fileName);
-    resetGeneratedDeck();
-    setNotice(`${rows.length} business data rows loaded from ${fileName}.`);
-    return rows;
+  function handleConnectGoogleDrive() {
+    window.location.href = "/api/connectors/google-drive/auth";
   }
 
-  async function handleLoadSample() {
-    setLoadingSample(true);
+  async function handleDisconnectGoogleDrive() {
     setNotice("");
 
     try {
-      const response = await fetch("/api/sample-csv");
-      const csvText = await response.text();
-      return ingestCsv(csvText, "branddeck-test-client-adoption.csv");
+      await fetch("/api/connectors/google-drive/status", {
+        method: "DELETE"
+      });
+      setGoogleDriveStatus((current) => ({
+        ...(current ?? { configured: true }),
+        connected: false
+      }));
+      setActiveGoogleSourceType(null);
+      setGoogleDriveResults([]);
+      setSelectedGoogleDriveFileIds([]);
+      setNotice("Google Drive disconnected.");
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Unable to load sample CSV.");
-      return [];
-    } finally {
-      setLoadingSample(false);
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "Unable to disconnect Google Drive."
+      );
     }
   }
 
-  async function handleUpload(file: File | null) {
-    if (!file) {
+  function handleOpenGoogleSourcePicker(sourceType: GoogleWorkspaceSourceType) {
+    setActiveGoogleSourceType(sourceType);
+    setGoogleDriveQuery("");
+    setGoogleDriveResults([]);
+    setSelectedGoogleDriveFileIds([]);
+    setNotice("");
+  }
+
+  function handleCloseGoogleSourcePicker() {
+    setActiveGoogleSourceType(null);
+    setSelectedGoogleDriveFileIds([]);
+  }
+
+  function handleToggleGoogleDriveFile(fileId: string) {
+    setSelectedGoogleDriveFileIds((current) =>
+      current.includes(fileId)
+        ? current.filter((id) => id !== fileId)
+        : [...current, fileId].slice(0, 6)
+    );
+  }
+
+  async function handleSearchGoogleDrive() {
+    setSearchingGoogleDrive(true);
+    setNotice("");
+
+    try {
+      const response = await fetch(
+        `/api/connectors/google-drive/search?q=${encodeURIComponent(
+          googleDriveQuery
+        )}&type=${encodeURIComponent(activeGoogleSourceType ?? "all")}`
+      );
+      const result = (await response.json()) as {
+        files?: GoogleDriveFileOption[];
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(result.error ?? "Unable to search Google Drive.");
+      }
+
+      setGoogleDriveResults(result.files ?? []);
+      setSelectedGoogleDriveFileIds([]);
+      setNotice(
+        `${result.files?.length ?? 0} Google Drive source file${
+          (result.files?.length ?? 0) === 1 ? "" : "s"
+        } found.`
+      );
+    } catch (error) {
+      setNotice(
+        error instanceof Error ? error.message : "Unable to search Google Drive."
+      );
+    } finally {
+      setSearchingGoogleDrive(false);
+    }
+  }
+
+  async function handleImportGoogleDriveFiles() {
+    if (selectedGoogleDriveFileIds.length === 0) {
       return;
     }
 
+    setImportingGoogleDrive(true);
+    setNotice("");
+    resetGeneratedDeck();
+
     try {
-      const csvText = await file.text();
-      ingestCsv(csvText, file.name);
+      const response = await fetch("/api/connectors/google-drive/import", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          fileIds: selectedGoogleDriveFileIds
+        })
+      });
+      const result = (await response.json()) as GoogleDriveImportResponse;
+
+      if (!response.ok) {
+        throw new Error(result.error ?? "Unable to import Google Drive files.");
+      }
+
+      const documents = result.documents ?? [];
+
+      if (documents.length === 0) {
+        throw new Error("Selected Google Drive files did not include readable text.");
+      }
+
+      setSourceDocuments((current) => [...current, ...documents].slice(0, 6));
+      setActiveGoogleSourceType(null);
+      setSelectedGoogleDriveFileIds([]);
+      setNotice(
+        `${documents.length} Google Drive source${
+          documents.length === 1 ? "" : "s"
+        } attached for planner evidence.`
+      );
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Unable to read CSV file.");
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "Unable to import Google Drive files."
+      );
+    } finally {
+      setImportingGoogleDrive(false);
     }
+  }
+
+  function handleStartOver() {
+    setPrompt(DEFAULT_PROMPT);
+    setSelectedRecipeId("auto");
+    setSelectedClientProfileId("");
+    setClientProfileContext("");
+    setBusinessSnapshot(EMPTY_BUSINESS_SNAPSHOT);
+    setCsvRows([]);
+    setSourceDocuments([]);
+    setSourceNotes("");
+    setActiveGoogleSourceType(null);
+    setGoogleDriveQuery("");
+    setGoogleDriveResults([]);
+    setSelectedGoogleDriveFileIds([]);
+    resetGeneratedDeck();
+    setActiveCreatorStep("brief");
+    setWorkspaceView("generate");
+    setNotice("Started a new presentation request. Brand settings and saved templates are unchanged.");
+  }
+
+  function applyBusinessSnapshot(
+    snapshot: BusinessSnapshotState,
+    noticeMessage?: string
+  ) {
+    setBusinessSnapshot(snapshot);
+    setCsvRows(businessSnapshotToRows(snapshot));
+    resetGeneratedDeck();
+    if (noticeMessage) {
+      setNotice(noticeMessage);
+    } else {
+      setNotice("");
+    }
+  }
+
+  function handleBusinessSnapshotChange(
+    field: keyof BusinessSnapshotState,
+    value: string
+  ) {
+    const nextSnapshot = {
+      ...businessSnapshot,
+      [field]: value
+    };
+    applyBusinessSnapshot(nextSnapshot);
+  }
+
+  function handleUseExampleSnapshot() {
+    applyBusinessSnapshot(
+      EXAMPLE_BUSINESS_SNAPSHOT,
+      "Example account snapshot loaded. Update any metric or context before generating."
+    );
+  }
+
+  function handleSelectClientProfile(profileId: string) {
+    const profile = CLIENT_PROFILES.find((item) => item.id === profileId);
+
+    if (!profile) {
+      return;
+    }
+
+    setSelectedClientProfileId(profile.id);
+    setClientProfileContext(profile.context);
+    applyBusinessSnapshot(
+      profile.snapshot,
+      `${profile.name} profile loaded with tools, context, and reporting metrics.`
+    );
+  }
+
+  function handleClientProfileContextChange(value: string) {
+    setClientProfileContext(value);
+    resetGeneratedDeck();
+    setNotice("");
+  }
+
+  function handleClearClientProfile() {
+    setSelectedClientProfileId("");
+    setClientProfileContext("");
+    resetGeneratedDeck();
+    setNotice("Client profile cleared. Metrics and source notes are unchanged.");
   }
 
   function applyBrandContractResponse(result: BrandContractApiResponse) {
@@ -3818,7 +5172,10 @@ export default function Home() {
   function handleAddRecipeLayout(layoutId: ApprovedLayoutId) {
     setRecipeBuilder((current) => ({
       ...current,
-      layoutIds: [...current.layoutIds, layoutId].slice(0, 12)
+      layoutIds: [...current.layoutIds, layoutId].slice(
+        0,
+        MAX_ADMIN_RECIPE_LAYOUTS
+      )
     }));
     setExportCertificate(null);
   }
@@ -4023,7 +5380,7 @@ export default function Home() {
     }
 
     setTemplateFileName(file.name);
-    setTemplateStatus("Inspecting template locally...");
+    setTemplateStatus("Inspecting template...");
     setTemplateUploading(true);
     setExportCertificate(null);
 
@@ -4049,14 +5406,14 @@ export default function Home() {
         `Indexed ${result.slideCount} slides, ${result.layoutCount} layouts, and ${result.mediaCount} media assets.`
       );
       setNotice(
-        "Template kit indexed locally and governed for template export."
+        "Template kit indexed and governed for template export."
       );
     } catch (error) {
       setTemplateKit(null);
       setTemplateGovernance(null);
       setBrandPreflight(null);
       setTemplateStatus(
-        "Template intake failed. Procore 2025 remains the active contract."
+        "Template intake failed. The active contract remains in use."
       );
       setNotice(error instanceof Error ? error.message : "Template intake failed.");
     } finally {
@@ -4316,6 +5673,9 @@ export default function Home() {
 
   function buildSourcePack() {
     return [
+      ...(clientProfileContext.trim()
+        ? [createSourceDocument("Client profile", clientProfileContext, "brief")]
+        : []),
       ...sourceDocuments.map(({ characters: _characters, ...document }) => document),
       ...(sourceNotes.trim()
         ? [createSourceDocument("Creator documentation notes", sourceNotes, "notes")]
@@ -4324,10 +5684,12 @@ export default function Home() {
   }
 
   async function buildValidatedDeckPlan() {
-    const rows = csvRows.length > 0 ? csvRows : await handleLoadSample();
+    const rows = csvRows;
 
     if (rows.length === 0) {
-      throw new Error("Load a business data CSV before generating.");
+      throw new Error(
+        "Add the required account snapshot fields before generating."
+      );
     }
 
     const sourcePack = buildSourcePack();
@@ -4358,6 +5720,7 @@ export default function Home() {
     const plan = result.deckPlan;
     const report = result.validationReport;
     const accuracy = result.accuracyAudit;
+    const planningMode = result.planningMode ?? "deterministic";
 
     setDeckPlan(plan);
     setValidationReport(report);
@@ -4374,6 +5737,9 @@ export default function Home() {
       plan,
       report,
       accuracy,
+      planningMode,
+      plannerModel: result.plannerModel,
+      plannerFallbackReason: result.plannerFallbackReason,
       sourcePack,
       preflight
     };
@@ -4440,25 +5806,38 @@ export default function Home() {
     plan,
     report,
     accuracy,
+    planningMode,
+    plannerModel,
+    plannerFallbackReason,
     sourcePack,
     preflight
   }: {
     plan: DeckPlan;
     report: ValidationReport;
     accuracy: DeckAccuracyAudit;
+    planningMode: NonNullable<GeneratePlanApiResponse["planningMode"]>;
+    plannerModel?: string;
+    plannerFallbackReason?: string;
     sourcePack: SourceDocument[];
     preflight: BrandPreflightReport;
   }) {
+    const plannerPrefix =
+      planningMode === "openai_structured_outputs"
+        ? `AI-assisted planner${plannerModel ? ` (${plannerModel})` : ""}: `
+        : planningMode === "openai_fallback_deterministic"
+          ? `Deterministic fallback${plannerFallbackReason ? " after AI guardrail review" : ""}: `
+          : "Deterministic planner: ";
+
     if (!report.passed) {
-      return "Deck generated, but brand validation needs admin review before export.";
+      return `${plannerPrefix}Deck generated, but brand validation needs admin review before export.`;
     }
 
     if (!accuracy.passed) {
-      return "Deck generated, but content grounding needs review before export.";
+      return `${plannerPrefix}Deck generated, but content grounding needs review before export.`;
     }
 
     if (!templateKit) {
-      return `Deck generated and ready to export with ${plan.slides.length} slides${
+      return `${plannerPrefix}Deck generated and ready to export with ${plan.slides.length} slides${
         sourcePack.length > 0
           ? ` and ${sourcePack.length} source document${sourcePack.length === 1 ? "" : "s"} cited`
           : ""
@@ -4481,13 +5860,13 @@ export default function Home() {
     }
 
     if (exportPreflight.status !== "ready") {
-      return "Deck generated, but Brand Settings need review before export.";
+      return `${plannerPrefix}Deck generated, but Brand Settings need review before export.`;
     }
 
     setAuditingExport(true);
     const certificate = await runTemplateExportAudit(plan);
 
-    return `Deck generated and ready to export: ${certificate.referencedSlides} slides, ${certificate.placeholderHits} placeholder hits, ${certificate.brandValidationScore} brand validation.`;
+    return `${plannerPrefix}Deck generated and ready to export: ${certificate.referencedSlides} slides, ${certificate.placeholderHits} placeholder hits, ${certificate.brandValidationScore} brand validation.`;
   }
 
   async function handleGenerate() {
@@ -4791,7 +6170,7 @@ export default function Home() {
           templateKitId: templateKit.id,
           objectMap,
           deckPlan,
-          importedBy: "Local brand admin"
+          importedBy: "Brand admin"
         })
       });
       const result = (await response.json()) as {
@@ -4854,7 +6233,7 @@ export default function Home() {
       await refreshBrandPreflight(templateKit.id, deckPlan);
       setNotice(
         result.governance.summary.bindingSource === "built_in_procore"
-          ? "Object map reset to the built-in Procore binding seed."
+          ? "Object map reset to the built-in template binding seed."
           : "Object map reset. This template now needs an admin-imported object map before template export."
       );
     } catch (error) {
@@ -4973,7 +6352,7 @@ export default function Home() {
         </div>
         <div className="flex items-center gap-3 text-xs font-bold uppercase tracking-[0.08em] text-white">
           <span className="h-1.5 w-1.5 rounded-full bg-brand-orange" />
-          Local Mode (MVP)
+          Brand Governed
         </div>
       </header>
 
@@ -5250,13 +6629,39 @@ export default function Home() {
 
                 {activeCreatorStep === "context" && (
                   <div key="context" className="workflow-step-panel space-y-4">
+                    <ClientProfilePanel
+                      selectedProfileId={selectedClientProfileId}
+                      profileContext={clientProfileContext}
+                      workflowBusy={workflowBusy}
+                      onSelectProfile={handleSelectClientProfile}
+                      onProfileContextChange={handleClientProfileContextChange}
+                      onClearProfile={handleClearClientProfile}
+                    />
+
                     <BusinessDataCard
+                      businessSnapshot={businessSnapshot}
                       kpiSummary={kpiSummary}
-                      loadingSample={loadingSample}
-                      generating={generating}
-                      preparingExport={preparingExport}
-                      onLoadSample={handleLoadSample}
-                      onUpload={handleUpload}
+                      workflowBusy={workflowBusy}
+                      onSnapshotChange={handleBusinessSnapshotChange}
+                      onUseExample={handleUseExampleSnapshot}
+                    />
+
+                    <ConnectedContextPanel
+                      googleDriveStatus={googleDriveStatus}
+                      activeGoogleSourceType={activeGoogleSourceType}
+                      googleDriveQuery={googleDriveQuery}
+                      googleDriveResults={googleDriveResults}
+                      selectedGoogleDriveFileIds={selectedGoogleDriveFileIds}
+                      searchingGoogleDrive={searchingGoogleDrive}
+                      importingGoogleDrive={importingGoogleDrive}
+                      onOpenGoogleSourcePicker={handleOpenGoogleSourcePicker}
+                      onCloseGoogleSourcePicker={handleCloseGoogleSourcePicker}
+                      onConnectGoogleDrive={handleConnectGoogleDrive}
+                      onDisconnectGoogleDrive={handleDisconnectGoogleDrive}
+                      onGoogleDriveQueryChange={setGoogleDriveQuery}
+                      onSearchGoogleDrive={handleSearchGoogleDrive}
+                      onToggleGoogleDriveFile={handleToggleGoogleDriveFile}
+                      onImportGoogleDriveFiles={handleImportGoogleDriveFiles}
                     />
 
                     <SourcePackPanel
@@ -5270,8 +6675,6 @@ export default function Home() {
                       }}
                       onClearSources={handleClearSourcePack}
                     />
-
-                    <ConnectorMiniNote />
 
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                       <Button

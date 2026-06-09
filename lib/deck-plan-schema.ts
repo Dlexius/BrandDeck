@@ -11,6 +11,9 @@ export const APPROVED_LAYOUT_IDS = [
   "next_steps"
 ] as const;
 
+export const MAX_DECK_SLIDES = 32;
+export const MAX_SOURCE_DOCUMENT_CHARS = 50000;
+
 export const DeckSlideSchema = z.object({
   layout_id: z.enum(APPROVED_LAYOUT_IDS),
   title: z.string().min(1).max(120),
@@ -22,8 +25,15 @@ export const DeckSlideSchema = z.object({
 export const SourceDocumentSchema = z.object({
   id: z.string().min(1).max(80),
   name: z.string().min(1).max(120),
-  type: z.enum(["document", "notes", "transcript", "brief"]),
-  text: z.string().min(1).max(12000)
+  type: z.enum([
+    "document",
+    "notes",
+    "transcript",
+    "brief",
+    "spreadsheet",
+    "presentation"
+  ]),
+  text: z.string().min(1).max(MAX_SOURCE_DOCUMENT_CHARS)
 });
 
 export const SourcePackSummarySchema = z.object({
@@ -42,7 +52,7 @@ export const DeckPlanSchema = z.object({
   client_name: z.string().min(1).max(80),
   report_period: z.string().min(1).max(60),
   source_pack: SourcePackSummarySchema.optional(),
-  slides: z.array(DeckSlideSchema).min(1).max(16)
+  slides: z.array(DeckSlideSchema).min(1).max(MAX_DECK_SLIDES)
 });
 
 export type ApprovedLayoutId = (typeof APPROVED_LAYOUT_IDS)[number];

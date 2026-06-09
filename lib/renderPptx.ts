@@ -611,7 +611,7 @@ function renderUsageTrend(
   addBodyCopy(
     slide,
     contract,
-    "Adoption score trend generated from the approved local CSV data.",
+    "Adoption score trend generated from approved account metrics.",
     px(1484.31),
     px(507.09),
     px(376.13),

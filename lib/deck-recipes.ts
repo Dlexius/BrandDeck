@@ -17,7 +17,7 @@ export const DeckRecipeSchema = z.object({
   description: z.string().min(1).max(260),
   audience: z.string().min(1).max(120),
   intent_keywords: z.array(z.string().min(1).max(40)).min(1),
-  slide_sequence: z.array(DeckRecipeSlideSchema).min(3).max(16)
+  slide_sequence: z.array(DeckRecipeSlideSchema).min(3).max(24)
 });
 
 const DeckRecipeLibrarySchema = z.object({

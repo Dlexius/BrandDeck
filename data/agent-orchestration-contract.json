@@ -29,7 +29,7 @@
     {
       "agent_id": "data_analyst",
       "name": "Data Analyst",
-      "purpose": "Normalize CSV or connector data into metrics, deltas, trends, and proof points.",
+      "purpose": "Normalize account metrics or connector data into deltas, trends, and proof points.",
       "allowed_outputs": ["metric_facts", "trend_points", "calculation_notes"],
       "forbidden_outputs": ["invented metrics", "visual encodings", "chart styling"]
     },

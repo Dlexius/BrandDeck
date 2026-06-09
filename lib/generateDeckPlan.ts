@@ -4,7 +4,9 @@ import {
   type DeckSlide,
   type SourceDocument,
   type SourcePackSummary,
-  DeckPlanSchema
+  DeckPlanSchema,
+  MAX_DECK_SLIDES,
+  MAX_SOURCE_DOCUMENT_CHARS
 } from "@/lib/deck-plan-schema";
 import {
   selectDeckRecipe,
@@ -141,6 +143,14 @@ function compactText(text: string, maxLength: number) {
     return normalized;
   }
 
+  function withEllipsis(value: string) {
+    if (maxLength <= 3) {
+      return ".".repeat(Math.max(0, maxLength));
+    }
+
+    return `${value.slice(0, maxLength - 3).trim()}...`.slice(0, maxLength);
+  }
+
   const slice = normalized.slice(0, Math.max(0, maxLength - 1)).trim();
   const punctuationBoundary = Math.max(
     slice.lastIndexOf("."),
@@ -155,10 +165,10 @@ function compactText(text: string, maxLength: number) {
   const wordBoundary = slice.lastIndexOf(" ");
 
   if (wordBoundary >= Math.floor(maxLength * 0.7)) {
-    return `${slice.slice(0, wordBoundary).trim()}...`;
+    return withEllipsis(slice.slice(0, wordBoundary).trim());
   }
 
-  return `${slice.trim()}...`;
+  return withEllipsis(slice.trim());
 }
 
 function buildPromptIntent(prompt: string) {
@@ -193,6 +203,17 @@ type SourceEvidence = {
   summary: SourcePackSummary;
 };
 
+type ProductReleaseUpdate = {
+  title: string;
+  solutionArea: string;
+  tool: string;
+  launchType: string;
+  region: string;
+  whatPoints: string[];
+  whyPoints: string[];
+  sourceRef: string;
+};
+
 function recipeAudience(recipe: DeckRecipe, fallbackAudience: string) {
   return recipe.audience.startsWith("Prompt-selected")
     ? fallbackAudience
@@ -218,6 +239,14 @@ function clientFacingReportSubtitle(recipe: DeckRecipe, reportPeriod: string) {
     return `90-day adoption risk plan | ${reportPeriod}`;
   }
 
+  if (recipe.recipe_id === "quarterly_business_review") {
+    return `Quarterly business review | ${reportPeriod}`;
+  }
+
+  if (recipe.recipe_id === "product_update_deck") {
+    return `Client-targeted product update | ${reportPeriod}`;
+  }
+
   if (recipe.recipe_id === "ad_hoc_brand_safe_deck") {
     return `Brand-governed client brief | ${reportPeriod}`;
   }
@@ -232,6 +261,14 @@ function deckChromeLabel(recipe: DeckRecipe) {
 
   if (recipe.recipe_id === "risk_remediation_plan") {
     return "RISK PLAN";
+  }
+
+  if (recipe.recipe_id === "quarterly_business_review") {
+    return "QBR";
+  }
+
+  if (recipe.recipe_id === "product_update_deck") {
+    return "PRODUCT UPDATE";
   }
 
   if (recipe.recipe_id === "ad_hoc_brand_safe_deck") {
@@ -268,6 +305,24 @@ function clientFacingSlideTitle(recipe: DeckRecipe, recipeSlide: DeckRecipeSlide
       next_steps: "30-60-90 Plan",
       appendix_source_notes: "Source Notes"
     },
+    quarterly_business_review: {
+      executive_summary: "Executive Value Readout",
+      kpi_scorecard: "Quarterly Health Signals",
+      usage_trend: "Momentum",
+      feature_adoption: "Product Usage Mix",
+      risks_recommendations: "Value Risks & Decisions",
+      next_steps: "Next-Quarter Plan",
+      appendix_source_notes: "Source Notes"
+    },
+    product_update_deck: {
+      executive_summary: "Client Relevance",
+      feature_adoption: "Installed Tool Fit",
+      kpi_scorecard: "Readiness Signals",
+      usage_trend: "Readiness",
+      risks_recommendations: "Rollout Risks & Enablement",
+      next_steps: "Client-Specific Rollout Plan",
+      appendix_source_notes: "Source Notes"
+    },
     ad_hoc_brand_safe_deck: {
       executive_summary: "Brief Summary",
       kpi_scorecard: "Relevant Metrics",
@@ -277,6 +332,13 @@ function clientFacingSlideTitle(recipe: DeckRecipe, recipeSlide: DeckRecipeSlide
       appendix_source_notes: "Source Notes"
     }
   };
+  if (
+    recipe.recipe_id === "quarterly_business_review" &&
+    recipeSlide.title === "Expansion Opportunities"
+  ) {
+    return recipeSlide.title;
+  }
+
   const recipeTitle = recipeTitles[recipe.recipe_id]?.[recipeSlide.slide_role];
 
   if (recipeTitle) {
@@ -334,7 +396,7 @@ function executiveSummaryPoints(
       "Latest period metrics need confirmation.",
       `${current.report_period} values shown where available.`,
       `${current.active_users} active users in available data.`,
-      "Review CSV/source connector mapping."
+      "Review account metrics or connector mapping."
     ];
   }
 
@@ -353,6 +415,24 @@ function executiveSummaryPoints(
       `${current.adoption_score}% adoption; backslide risk remains.`,
       `${current.projects_active} active projects need launch governance.`,
       `${current.mobile_usage_rate}% mobile usage; reinforce field habits.`
+    ];
+  }
+
+  if (recipe.recipe_id === "quarterly_business_review") {
+    return [
+      `${current.adoption_score}% adoption supports the quarterly value story.`,
+      `${adoptionRate}% licensed coverage across ${current.projects_active} active projects.`,
+      `${current.top_feature} is the strongest workflow signal.`,
+      `Next-quarter focus: ${current.lowest_feature}.`
+    ];
+  }
+
+  if (recipe.recipe_id === "product_update_deck") {
+    return [
+      `${current.adoption_score}% adoption indicates rollout readiness.`,
+      `${current.top_feature} usage creates a strong product-update entry point.`,
+      `${current.lowest_feature} needs targeted enablement.`,
+      "Update content should match owned tools and active workflows."
     ];
   }
 
@@ -394,6 +474,14 @@ function executiveBusinessImpact(
     ).toLowerCase()} habits and new-project onboarding.`;
   }
 
+  if (recipe.recipe_id === "quarterly_business_review") {
+    return `QBR focus: connect adoption health to value delivered and next-quarter priorities.`;
+  }
+
+  if (recipe.recipe_id === "product_update_deck") {
+    return `Product focus: target updates to tools already in use and workflow gaps that need enablement.`;
+  }
+
   if (recipe.recipe_id === "ad_hoc_brand_safe_deck") {
     return "Brief focus: connect current adoption signals to a brand-safe operating plan.";
   }
@@ -419,6 +507,14 @@ function metricContextForRecipe(
     return `${adoptionRate}% coverage; ${current.projects_active} projects need consistent workflow ownership.`;
   }
 
+  if (recipe.recipe_id === "quarterly_business_review") {
+    return `${adoptionRate}% licensed coverage frames the quarterly value and renewal conversation.`;
+  }
+
+  if (recipe.recipe_id === "product_update_deck") {
+    return `${current.projects_active} active projects and ${current.mobile_usage_rate}% mobile usage shape rollout readiness.`;
+  }
+
   if (recipe.recipe_id === "ad_hoc_brand_safe_deck") {
     return "Metrics summarize current adoption signals for the requested brief.";
   }
@@ -438,6 +534,14 @@ function trendSummaryForRecipe(
 
   if (recipe.recipe_id === "executive_adoption_update") {
     return `Adoption climbed from ${first.adoption_score}% to ${current.adoption_score}%; active users reached ${current.active_users}.`;
+  }
+
+  if (recipe.recipe_id === "quarterly_business_review") {
+    return `Quarterly adoption moved from ${first.adoption_score}% to ${current.adoption_score}%; active users reached ${current.active_users}.`;
+  }
+
+  if (recipe.recipe_id === "product_update_deck") {
+    return `Readiness rose from ${first.adoption_score}% to ${current.adoption_score}%; target updates to proven workflows.`;
   }
 
   if (recipe.recipe_id === "ad_hoc_brand_safe_deck") {
@@ -471,6 +575,22 @@ function recommendationsForRecipe(
     ];
   }
 
+  if (recipe.recipe_id === "quarterly_business_review") {
+    return [
+      safeSourceActions[0] ?? "Confirm the value narrative for the next executive business review.",
+      safeSourceActions[1] ?? `Prioritize ${String(workflowNoun(current.lowest_feature)).toLowerCase()} enablement for next quarter.`,
+      safeSourceActions[2] ?? "Tie adoption follow-up to renewal, expansion, or value-realization owners."
+    ];
+  }
+
+  if (recipe.recipe_id === "product_update_deck") {
+    return [
+      safeSourceActions[0] ?? "Map product updates to the client's owned tools and active workflows.",
+      safeSourceActions[1] ?? `Use ${String(workflowNoun(current.top_feature)).toLowerCase()} momentum as the enablement entry point.`,
+      safeSourceActions[2] ?? `Build targeted enablement for ${String(workflowNoun(current.lowest_feature)).toLowerCase()}.`
+    ];
+  }
+
   return [
     safeSourceActions[0] ?? current.recommendation_1,
     safeSourceActions[1] ?? current.recommendation_2,
@@ -500,6 +620,22 @@ function actionStepsForRecipe(recipe: DeckRecipe, current: NormalizedRow) {
       "Confirm the audience-specific decision needed from this brief.",
       compactText(current.recommendation_1, 130),
       "Keep follow-up content inside the approved template library."
+    ];
+  }
+
+  if (recipe.recipe_id === "quarterly_business_review") {
+    return [
+      "Align QBR narrative to value delivered and next-quarter priorities.",
+      compactText(current.recommendation_1, 130),
+      "Confirm executive owners for renewal or expansion follow-up."
+    ];
+  }
+
+  if (recipe.recipe_id === "product_update_deck") {
+    return [
+      "Confirm which owned tools should anchor the product update.",
+      compactText(current.recommendation_2, 130),
+      "Turn relevant release notes into workflow-specific enablement actions."
     ];
   }
 
@@ -583,7 +719,7 @@ function findPrioritizedEvidenceSentences(
 function buildSourceEvidence(sourceDocuments: SourceDocument[] = []): SourceEvidence {
   const boundedDocuments = sourceDocuments.slice(0, 6).map((document) => ({
     ...document,
-    text: document.text.slice(0, 12000)
+    text: document.text.slice(0, MAX_SOURCE_DOCUMENT_CHARS)
   }));
   const refs = boundedDocuments.map(
     (document) => `Source doc: ${sourceDocumentLabel(document)}`
@@ -597,13 +733,13 @@ function buildSourceEvidence(sourceDocuments: SourceDocument[] = []): SourceEvid
   const recommendations = findPrioritizedEvidenceSentences(
     boundedDocuments,
     /^\s*(recommendation|next step|action):/i,
-    /\b(recommend|next step|action|owner|mitigate|enable|train|review)\b/i,
+    /\b(recommend|next step|action|owner|mitigate|enable|train|review|rollout|launch|product update|release)\b/i,
     6
   );
   const trendNotes = findPrioritizedEvidenceSentences(
     boundedDocuments,
     /^\s*trend note:/i,
-    /\b(adoption|usage|mobile|growth|active|trend|trajectory|volume)\b/i,
+    /\b(adoption|usage|mobile|growth|active|trend|trajectory|volume|tool|tools|module|modules|product|release|roadmap|feature)\b/i,
     6
   );
   const constraints = findPrioritizedEvidenceSentences(
@@ -614,7 +750,7 @@ function buildSourceEvidence(sourceDocuments: SourceDocument[] = []): SourceEvid
   );
   const appendixNotes = boundedDocuments.map(
     (document) =>
-      `${sourceDocumentLabel(document)}: ${document.type}, ${document.text.length.toLocaleString()} characters reviewed locally.`
+      `${sourceDocumentLabel(document)}: ${document.type}, ${document.text.length.toLocaleString()} characters reviewed.`
   );
 
   return {
@@ -630,6 +766,281 @@ function buildSourceEvidence(sourceDocuments: SourceDocument[] = []): SourceEvid
       constraints: constraints.map(sourceRefText)
     }
   };
+}
+
+function cleanProductUpdatePoint(value: string) {
+  return normalizeWhitespace(value)
+    .replace(
+      /^(what|what it is|why|why it matters|who it'?s for|how to get started)\s*:\s*/i,
+      ""
+    )
+    .replace(/^[-:|•●○\s]+/, "")
+    .trim();
+}
+
+function splitProductUpdatePoints(block: string, maxItems: number) {
+  const normalized = normalizeWhitespace(block);
+
+  if (!normalized) {
+    return [];
+  }
+
+  const bulletParts = normalized
+    .split(/\s*[•●○]\s*/g)
+    .map(cleanProductUpdatePoint)
+    .filter((point) => point.length >= 12);
+  const parts =
+    bulletParts.length > 1
+      ? bulletParts
+      : splitSentences(normalized).map(cleanProductUpdatePoint);
+
+  return uniqueClientLines(parts)
+    .filter(isSafeClientSourceCopy)
+    .map((point) => compactClientSourceCopy(point, 138))
+    .slice(0, maxItems);
+}
+
+function firstUsefulPoint(points: string[], fallback: string) {
+  return points.find((point) => point.length > 0) ?? fallback;
+}
+
+function normalizeMetadataValue(value: string, fallback: string) {
+  const cleaned = normalizeWhitespace(value)
+    .replace(/^[:|\s]+/, "")
+    .replace(/[|]+$/g, "")
+    .trim();
+
+  return compactText(cleaned || fallback, 54);
+}
+
+function extractTitleFromProductBlock(block: string) {
+  const beforeWhat = block.match(/^(.{4,140}?)\s+What(?: it is)?\s*:/i)?.[1];
+
+  if (beforeWhat) {
+    return beforeWhat;
+  }
+
+  const afterWhy = block
+    .replace(/[\s\S]*\bWhy(?: it matters)?\s*:/i, "")
+    .split(/\bSolution Area\s*:/i)[0]
+    ?.trim();
+
+  if (afterWhy) {
+    const tail = normalizeWhitespace(afterWhy.replace(/[•●○]/g, " "));
+    const lastBoundary = Math.max(
+      tail.lastIndexOf("."),
+      tail.lastIndexOf("?"),
+      tail.lastIndexOf("!")
+    );
+    const titleTail =
+      lastBoundary >= 0 ? tail.slice(lastBoundary + 1).trim() : tail;
+
+    if (titleTail.length >= 4 && titleTail.length <= 100) {
+      return titleTail;
+    }
+  }
+
+  if (afterWhy && afterWhy.length <= 120) {
+    return afterWhy;
+  }
+
+  return "";
+}
+
+function productBlockForMetadata(
+  text: string,
+  metadataStart: number,
+  metadataEnd: number,
+  nextMetadataStart: number
+) {
+  const after = text.slice(metadataEnd, nextMetadataStart).trim();
+  const before = text.slice(Math.max(0, metadataStart - 2400), metadataStart).trim();
+  const afterHasWhat = /\bWhat(?: it is)?\s*:/i.test(after);
+  const beforeHasWhat = /\bWhat(?: it is)?\s*:/i.test(before);
+
+  if (afterHasWhat || !beforeHasWhat) {
+    return after;
+  }
+
+  return before;
+}
+
+function extractWhatAndWhyBlocks(block: string) {
+  const whatMatch = block.match(
+    /\bWhat(?: it is)?\s*:\s*([\s\S]*?)(?=\bWhy(?: it matters)?\s*:|\bWho it'?s for\s*:|\bHow to get started\s*:|$)/i
+  );
+  const whyMatch = block.match(
+    /\bWhy(?: it matters)?\s*:\s*([\s\S]*?)(?=\bHow to get started\s*:|\bSolution Area\s*:|$)/i
+  );
+
+  return {
+    what: whatMatch?.[1] ?? "",
+    why: whyMatch?.[1] ?? ""
+  };
+}
+
+function extractProductReleaseUpdates(
+  sourceDocuments: SourceDocument[] = []
+): ProductReleaseUpdate[] {
+  const updates: ProductReleaseUpdate[] = [];
+  const metadataPattern =
+    /Solution Area\s*:?\s*([^|]{1,100})\|\s*Tool\s*:?\s*([^|]{1,100})\|\s*Launch Type\s*:?\s*([^|]{1,80})\|\s*Region\s*:?\s*((?:All Regions|US Only|US|ANZ,\s*UKI|APAC,\s*NAMER,\s*UKI|NAMER|APAC|UKI|EMEA|EU|Global|North America|[^|]{1,42}?)(?=\s+(?:[A-Z][A-Za-z0-9]+|What(?: it is)?\s*:)|$))/gi;
+
+  for (const document of sourceDocuments.slice(0, 10)) {
+    const text = normalizeWhitespace(document.text.slice(0, MAX_SOURCE_DOCUMENT_CHARS));
+    const matches = Array.from(text.matchAll(metadataPattern));
+
+    matches.forEach((match, index) => {
+      const metadataStart = match.index ?? 0;
+      const metadataEnd = metadataStart + match[0].length;
+      const nextMetadataStart = matches[index + 1]?.index ?? text.length;
+      const block = productBlockForMetadata(
+        text,
+        metadataStart,
+        metadataEnd,
+        nextMetadataStart
+      );
+      const solutionArea = normalizeMetadataValue(match[1] ?? "", "Product");
+      const tool = normalizeMetadataValue(match[2] ?? "", "Tool");
+      const launchType = normalizeMetadataValue(match[3] ?? "", "Update");
+      const region = normalizeMetadataValue(match[4] ?? "", "All regions");
+      const extractedTitle = compactText(
+        cleanProductUpdatePoint(extractTitleFromProductBlock(block)) ||
+          tool,
+        56
+      );
+      const title =
+        extractedTitle.toLowerCase() === solutionArea.toLowerCase() ||
+        /^[\d\s._-]+/.test(extractedTitle)
+          ? compactText(`${tool} Update`, 56)
+          : extractedTitle;
+      const { what, why } = extractWhatAndWhyBlocks(block);
+      const whatPoints = splitProductUpdatePoints(what, 3);
+      const whyPoints = splitProductUpdatePoints(why, 3);
+
+      if (whatPoints.length === 0 && whyPoints.length === 0) {
+        return;
+      }
+
+      updates.push({
+        title,
+        solutionArea,
+        tool,
+        launchType,
+        region,
+        whatPoints,
+        whyPoints,
+        sourceRef: sourceRefText(
+          `${sourceDocumentLabel(document)}: ${title} (${launchType})`
+        )
+      });
+    });
+  }
+
+  const seen = new Set<string>();
+
+  return updates.filter((update) => {
+    const key = `${update.title}|${update.tool}|${update.launchType}`.toLowerCase();
+
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
+function groupProductUpdatesBySolutionArea(updates: ProductReleaseUpdate[]) {
+  const groups: Array<{ solutionArea: string; updates: ProductReleaseUpdate[] }> = [];
+  const indexByArea = new Map<string, number>();
+
+  updates.forEach((update) => {
+    const key = update.solutionArea.toLowerCase();
+    const existingIndex = indexByArea.get(key);
+
+    if (existingIndex !== undefined) {
+      groups[existingIndex]?.updates.push(update);
+      return;
+    }
+
+    indexByArea.set(key, groups.length);
+    groups.push({
+      solutionArea: update.solutionArea,
+      updates: [update]
+    });
+  });
+
+  return groups;
+}
+
+function parseMeetingLengthMinutes(prompt: string) {
+  const hourMatch = prompt.match(/\b(\d{1,2})\s*(hour|hr)s?\b/i);
+
+  if (hourMatch) {
+    return Number(hourMatch[1]) * 60;
+  }
+
+  const minuteMatch = prompt.match(/\b(\d{1,3})\s*(minute|min)s?\b/i);
+
+  return minuteMatch ? Number(minuteMatch[1]) : 0;
+}
+
+function targetDeckSlideCount({
+  recipe,
+  userPrompt,
+  sourceEvidence,
+  sourceCharacters,
+  productUpdates
+}: {
+  recipe: DeckRecipe;
+  userPrompt: string;
+  sourceEvidence: SourceEvidence;
+  sourceCharacters: number;
+  productUpdates: ProductReleaseUpdate[];
+}) {
+  const requestedMinutes = parseMeetingLengthMinutes(userPrompt);
+  const promptRequestsDepth = EXPANDED_DECK_PROMPT_PATTERN.test(userPrompt);
+
+  if (recipe.recipe_id === "product_update_deck") {
+    if (requestedMinutes >= 60) {
+      return MAX_DECK_SLIDES;
+    }
+
+    if (requestedMinutes >= 45) {
+      return 28;
+    }
+
+    if (requestedMinutes >= 30) {
+      return 22;
+    }
+
+    if (productUpdates.length >= 12 && promptRequestsDepth) {
+      return 28;
+    }
+
+    if (productUpdates.length >= 8) {
+      return 22;
+    }
+
+    if (productUpdates.length >= 4) {
+      return 16;
+    }
+
+    return shouldExpandDeckForContext({
+      userPrompt,
+      sourceEvidence,
+      sourceCharacters
+    })
+      ? 14
+      : 12;
+  }
+
+  if (requestedMinutes >= 45 || promptRequestsDepth) {
+    return Math.min(MAX_DECK_SLIDES, Math.max(16, recipe.slide_sequence.length + 4));
+  }
+
+  return Math.min(MAX_DECK_SLIDES, 16);
 }
 
 function appendEvidence(base: string[], additions: string[], maxItems = 3) {
@@ -790,7 +1201,7 @@ export function generateDeckPlan(
   options: GenerateDeckPlanOptions = {}
 ): DeckPlan {
   if (parsedCsvData.length === 0) {
-    throw new Error("At least one CSV row is required to generate a deck.");
+    throw new Error("At least one account metric row is required to generate a deck.");
   }
 
   const inputRows = parsedCsvData.map(normalizeRow);
@@ -825,6 +1236,14 @@ export function generateDeckPlan(
   const sourceEvidence = buildSourceEvidence(options.sourceDocuments);
   const sourceDocRefs = sourceEvidence.refs;
   const sourceCharacters = sourcePackCharacterCount(options.sourceDocuments);
+  const productUpdates = extractProductReleaseUpdates(options.sourceDocuments);
+  const slideBudget = targetDeckSlideCount({
+    recipe,
+    userPrompt,
+    sourceEvidence,
+    sourceCharacters,
+    productUpdates
+  });
   const chromeLabel = deckChromeLabel(recipe);
   const safeSourceActions = safeSourceRecommendations(sourceEvidence);
   const planClientName = compactText(current.client_name || first.client_name, 80);
@@ -841,6 +1260,22 @@ export function generateDeckPlan(
       ...safeSourceActions,
       ...actionStepsForRecipe(recipe, current)
     ]).slice(0, 3);
+  }
+
+  function productUpdateAgendaItems() {
+    const solutionAreas = groupProductUpdatesBySolutionArea(productUpdates)
+      .map((group) => group.solutionArea)
+      .slice(0, 3);
+
+    return uniqueClientLines([
+      "Audience relevance",
+      "Client tool fit",
+      ...solutionAreas.map((area) => `${area} updates`),
+      "Rollout risks",
+      "Client-specific next steps"
+    ])
+      .map((item) => compactText(item, 68))
+      .slice(0, 6);
   }
 
   function sourceTrendFollowUps() {
@@ -868,13 +1303,24 @@ export function generateDeckPlan(
       `Review ${current.projects_active} active projects for repeatable adoption habits.`,
       `Use ${String(workflowNoun(current.top_feature)).toLowerCase()} wins to reinforce lower-usage teams.`
     ]).map((action) => compactText(action, 150));
+    const actionExpansionTitle =
+      recipe.recipe_id === "product_update_deck"
+        ? "Client Tool Enablement"
+        : recipe.recipe_id === "quarterly_business_review"
+          ? "Additional Value Actions"
+          : recipe.recipe_id === "risk_remediation_plan"
+            ? "Additional Risk Actions"
+            : "Context-Driven Actions";
+    const followUpExpansionTitle =
+      recipe.recipe_id === "product_update_deck"
+        ? "Product Rollout Follow-Up"
+        : recipe.recipe_id === "quarterly_business_review"
+          ? "QBR Follow-Up"
+          : "Context Follow-Up";
     const expansionSlides: DeckSlide[] = [
       {
         layout_id: "risks_recommendations",
-        title:
-          recipe.recipe_id === "risk_remediation_plan"
-            ? "Additional Risk Actions"
-            : "Context-Driven Actions",
+        title: actionExpansionTitle,
         fields: {
           deck_label: chromeLabel,
           risk_summary: compactText(
@@ -911,7 +1357,7 @@ export function generateDeckPlan(
 
     expansionSlides.push({
       layout_id: "next_steps",
-      title: "Context Follow-Up",
+      title: followUpExpansionTitle,
       fields: {
         deck_label: chromeLabel,
         steps: followUpSteps.slice(0, 3),
@@ -947,7 +1393,7 @@ export function generateDeckPlan(
         },
         speaker_notes:
           "Opening slide rendered from the approved title_client_report layout.",
-          source_refs: ["CSV: client_name", "CSV: report_period", ...sourceRefsForRecipe]
+          source_refs: ["Account metric: client_name", "Account metric: report_period", ...sourceRefsForRecipe]
         };
       case "agenda":
         return {
@@ -955,7 +1401,10 @@ export function generateDeckPlan(
         title: recipeSlide.title,
         fields: {
             deck_label: chromeLabel,
-            agenda_items: agendaItemsForRecipe(recipe)
+            agenda_items:
+              recipe.recipe_id === "product_update_deck"
+                ? productUpdateAgendaItems()
+                : agendaItemsForRecipe(recipe)
         },
           source_refs: ["Prompt: report structure", ...sourceRefsForRecipe]
         };
@@ -973,16 +1422,16 @@ export function generateDeckPlan(
             mobileDelta
             ,
             metricsNeedConfirmation
-          ),
+          ).map((point) => compactText(point, 42)),
           business_impact: compactText(
               executiveBusinessImpact(recipe, current, metricsNeedConfirmation),
             78
           )
         },
         source_refs: [
-          "CSV: adoption_score",
-          "CSV: active_users",
-          "CSV: licensed_users",
+          "Account metric: adoption_score",
+          "Account metric: active_users",
+          "Account metric: licensed_users",
             "Prompt: user priorities",
             ...sourceRefsForRecipe,
             ...sourceDocRefs
@@ -1009,11 +1458,11 @@ export function generateDeckPlan(
           )
         },
         source_refs: [
-          "CSV: active_users",
-          "CSV: licensed_users",
-          "CSV: adoption_score",
-          "CSV: projects_active",
-            "CSV: mobile_usage_rate",
+          "Account metric: active_users",
+          "Account metric: licensed_users",
+          "Account metric: adoption_score",
+          "Account metric: projects_active",
+            "Account metric: mobile_usage_rate",
             ...sourceRefsForRecipe
         ]
         };
@@ -1047,9 +1496,9 @@ export function generateDeckPlan(
           )
         },
           source_refs: appendEvidence([
-            "CSV: report_period",
-            "CSV: adoption_score",
-            "CSV: active_users",
+            "Account metric: report_period",
+            "Account metric: adoption_score",
+            "Account metric: active_users",
             ...sourceRefsForRecipe
           ], sourceDocRefs)
         };
@@ -1078,11 +1527,11 @@ export function generateDeckPlan(
           lowest_feature: current.lowest_feature
         },
         source_refs: [
-          "CSV: daily_logs_count",
-          "CSV: rfi_count",
-          "CSV: submittals_count",
-          "CSV: top_feature",
-            "CSV: lowest_feature",
+          "Account metric: daily_logs_count",
+          "Account metric: rfi_count",
+          "Account metric: submittals_count",
+          "Account metric: top_feature",
+            "Account metric: lowest_feature",
             ...sourceRefsForRecipe
         ]
         };
@@ -1100,10 +1549,10 @@ export function generateDeckPlan(
           ).map((recommendation) => compactText(recommendation, 150))
         },
         source_refs: appendEvidence([
-          "CSV: risk_summary",
-          "CSV: recommendation_1",
-          "CSV: recommendation_2",
-            "CSV: recommendation_3",
+          "Account context: risk_summary",
+          "Account context: recommendation_1",
+          "Account context: recommendation_2",
+            "Account context: recommendation_3",
             ...sourceRefsForRecipe
         ], [...sourceDocRefs, ...sourceEvidence.risks])
         };
@@ -1116,7 +1565,7 @@ export function generateDeckPlan(
             steps: nextStepLines().map((step) => compactText(step, 130))
         },
           source_refs: appendEvidence(
-            ["CSV: recommendations", "Prompt: action emphasis", ...sourceRefsForRecipe],
+            ["Account context: recommendations", "Prompt: action emphasis", ...sourceRefsForRecipe],
             sourceDocRefs
           )
         };
@@ -1133,7 +1582,7 @@ export function generateDeckPlan(
             ),
               sourceEvidence.summary.document_count > 0
                 ? `Supporting context: ${sourceEvidence.summary.document_count} supporting document(s) reviewed.`
-                : "Supporting context: CSV data and creator request only.",
+                : "Supporting context: account snapshot and creator request only.",
               "Presentation assurance: generated from the selected brand kit."
           ],
             note: compactText(
@@ -1142,7 +1591,7 @@ export function generateDeckPlan(
             )
         },
           source_refs: appendEvidence(
-            ["CSV: all columns", "Brand contract: approved_layouts", ...sourceRefsForRecipe],
+            ["Account metrics: all fields", "Brand contract: approved_layouts", ...sourceRefsForRecipe],
             [...sourceDocRefs, ...sourceEvidence.appendixNotes],
             6
           )
@@ -1159,12 +1608,225 @@ export function generateDeckPlan(
     }
   }
 
-  const baseSlides = recipe.slide_sequence.map(buildSlide);
+  function recipeSlideForRole(role: string) {
+    return recipe.slide_sequence.find((slide) => slide.slide_role === role);
+  }
+
+  function productSectionSlide(
+    solutionArea: string,
+    updates: ProductReleaseUpdate[]
+  ): DeckSlide {
+    const launchTypes = uniqueClientLines(
+      updates.map((update) => update.launchType).filter(Boolean)
+    ).join(", ");
+    const tools = uniqueClientLines(updates.map((update) => update.tool))
+      .slice(0, 3)
+      .join(", ");
+
+    return {
+      layout_id: "next_steps",
+      title: compactText(solutionArea, 48),
+      fields: {
+        deck_label: chromeLabel,
+        steps: [
+          compactText(`${updates.length} update${updates.length === 1 ? "" : "s"} in this section.`, 130),
+          compactText(`Tools: ${tools || "customer-owned workflows"}.`, 130),
+          compactText(`Launch mix: ${launchTypes || "product update"}.`, 130)
+        ],
+        note: "Release chapter"
+      },
+      source_refs: appendEvidence(
+        [`Product update section: ${solutionArea}`, ...sourceRefsForRecipe],
+        updates.map((update) => update.sourceRef),
+        6
+      )
+    };
+  }
+
+  function productUpdateFocusSlide(): DeckSlide {
+    return {
+      layout_id: "next_steps",
+      title: "Update Focus",
+      fields: {
+        deck_label: chromeLabel,
+        steps: [
+          "Confirm the product update source for the session.",
+          compactText(`Prioritize tools tied to ${current.top_feature}.`, 130),
+          compactText(`Prepare enablement around ${current.lowest_feature}.`, 130)
+        ],
+        note: "Source context recommended"
+      },
+      source_refs: appendEvidence(
+        ["Product update focus", ...sourceRefsForRecipe],
+        sourceDocRefs,
+        4
+      )
+    };
+  }
+
+  function productReleaseDetailSlide(
+    update: ProductReleaseUpdate
+  ): DeckSlide {
+    const what = firstUsefulPoint(
+      update.whatPoints,
+      `${update.tool} update is available for ${update.region}.`
+    );
+    const why = firstUsefulPoint(
+      update.whyPoints,
+      "Review relevance against the client's owned tools and rollout plan."
+    );
+    const followUp =
+      update.whatPoints[1] ??
+      update.whyPoints[1] ??
+      `Enable ${update.tool} owners before broader rollout.`;
+
+    return {
+      layout_id: "risks_recommendations",
+      title: compactText(update.title, 56),
+      fields: {
+        deck_label: chromeLabel,
+        risk_summary: compactText(
+          `${update.solutionArea} | ${update.tool} | ${update.launchType} | ${update.region}`,
+          190
+        ),
+        recommendations: [
+          compactText(`What: ${what}`, 150),
+          compactText(`Why: ${why}`, 150),
+          compactText(`Enablement: ${followUp}`, 150)
+        ]
+      },
+      source_refs: appendEvidence(
+        [update.sourceRef, ...sourceRefsForRecipe],
+        sourceDocRefs,
+        4
+      )
+    };
+  }
+
+  function productUpdateOverviewSlide(
+    selectedUpdates: ProductReleaseUpdate[]
+  ): DeckSlide {
+    const groups = groupProductUpdatesBySolutionArea(selectedUpdates).slice(0, 3);
+    const featureMetrics =
+      groups.length > 0
+        ? groups.map((group) => ({
+            feature: compactText(group.solutionArea, 32),
+            count: group.updates.length
+          }))
+        : [
+            { feature: "Owned tools", count: current.projects_active },
+            { feature: "Active users", count: current.active_users },
+            { feature: "Mobile usage", count: current.mobile_usage_rate }
+          ];
+
+    return {
+      layout_id: "feature_adoption",
+      title: "Release Mix",
+      fields: {
+        deck_label: chromeLabel,
+        chart_type: "table",
+        feature_metrics: featureMetrics,
+        top_feature: compactText(current.top_feature, 48),
+        lowest_feature: compactText(current.lowest_feature, 48)
+      },
+      source_refs: appendEvidence(
+        ["Product update source: release mix", ...sourceRefsForRecipe],
+        selectedUpdates.map((update) => update.sourceRef),
+        6
+      )
+    };
+  }
+
+  function buildProductUpdateDeckSlides() {
+    const introRoles = [
+      "title",
+      "agenda",
+      "executive_summary",
+      "feature_adoption",
+      "kpi_scorecard"
+    ];
+    const closingRoles = [
+      "risks_recommendations",
+      "next_steps",
+      "appendix_source_notes"
+    ];
+    const introSlides = introRoles.flatMap((role) => {
+      const slide = recipeSlideForRole(role);
+      return slide ? [buildSlide(slide)] : [];
+    });
+    const closingSlides = closingRoles.flatMap((role) => {
+      const slide = recipeSlideForRole(role);
+      return slide ? [buildSlide(slide)] : [];
+    });
+    const availableMiddleSlots = Math.max(
+      0,
+      slideBudget - introSlides.length - closingSlides.length
+    );
+
+    if (productUpdates.length === 0 || availableMiddleSlots === 0) {
+      const fallbackMiddle = [
+        productUpdateFocusSlide(),
+        productUpdateOverviewSlide([]),
+        ...(recipeSlideForRole("usage_trend")
+          ? [buildSlide(recipeSlideForRole("usage_trend") as DeckRecipeSlide)]
+          : [])
+      ].slice(0, availableMiddleSlots);
+
+      return [...introSlides, ...fallbackMiddle, ...closingSlides].slice(
+        0,
+        slideBudget
+      );
+    }
+
+    const middleSlides: DeckSlide[] = [];
+    const groupedUpdates = groupProductUpdatesBySolutionArea(productUpdates);
+    const selectedUpdates: ProductReleaseUpdate[] = [];
+    const availableReleaseSlots = Math.max(0, availableMiddleSlots - 1);
+
+    for (const group of groupedUpdates) {
+      if (middleSlides.length >= availableReleaseSlots) {
+        break;
+      }
+
+      const remainingAfterDivider = availableReleaseSlots - middleSlides.length - 1;
+
+      if (remainingAfterDivider <= 0) {
+        break;
+      }
+
+      middleSlides.push(productSectionSlide(group.solutionArea, group.updates));
+
+      for (const update of group.updates) {
+        if (middleSlides.length >= availableReleaseSlots) {
+          break;
+        }
+
+        middleSlides.push(productReleaseDetailSlide(update));
+        selectedUpdates.push(update);
+      }
+    }
+
+    const overview = productUpdateOverviewSlide(
+      selectedUpdates.length > 0 ? selectedUpdates : productUpdates.slice(0, 3)
+    );
+    const slides = [
+      ...introSlides,
+      ...[overview, ...middleSlides].slice(0, availableMiddleSlots),
+      ...closingSlides
+    ];
+
+    return slides.slice(0, slideBudget);
+  }
+
+  const baseSlides =
+    recipe.recipe_id === "product_update_deck"
+      ? buildProductUpdateDeckSlides()
+      : recipe.slide_sequence.map(buildSlide);
   const appendixIndex = recipe.slide_sequence.findIndex(
     (slide) => slide.slide_role === "appendix_source_notes"
   );
   const expansionSlides = buildContextExpansionSlides(
-    Math.max(0, 16 - baseSlides.length)
+    Math.max(0, slideBudget - baseSlides.length)
   );
   const slides =
     expansionSlides.length > 0 && appendixIndex >= 0
@@ -1181,7 +1843,7 @@ export function generateDeckPlan(
     deck_recipe_name: recipe.name,
     generation_mode: recipe.mode,
     recipe_confidence: recipeSelection.confidence,
-    audience: recipeAudience(recipe, intent.audience),
+    audience: compactText(recipeAudience(recipe, intent.audience), 80),
     client_name: planClientName,
     report_period: reportPeriod,
     source_pack: sourceEvidence.summary.document_count > 0
@@ -1195,9 +1857,9 @@ export function generateDeckPlan(
 
 export function createStructuredOutputsPlaceholder() {
   return {
-    status: "not_enabled_for_mvp",
+    status: "available_when_configured",
     reason:
-      "The MVP uses deterministic local planning. A future OpenAI Structured Outputs call can produce the same DeckPlanSchema shape, then the validator and renderer remain unchanged.",
+      "OpenAI Structured Outputs can produce the same DeckPlanSchema shape when configured. Validation and rendering remain deterministic so brand controls stay intact.",
     agent_orchestration_contract: "data/agent-orchestration-contract.json",
     suggested_specialists: [
       "intent_router",

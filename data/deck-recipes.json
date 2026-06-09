@@ -57,6 +57,47 @@
       ]
     },
     {
+      "recipe_id": "quarterly_business_review",
+      "name": "Quarterly Business Review",
+      "mode": "predefined",
+      "description": "Executive QBR structure for value delivered, adoption momentum, product usage, risks, and next-quarter priorities.",
+      "audience": "Executive sponsors, account leadership, customer success, and product stakeholders",
+      "intent_keywords": ["qbr", "quarterly business review", "business review", "quarterly", "renewal", "value realized", "executive review"],
+      "slide_sequence": [
+        { "slide_role": "title", "layout_id": "title_client_report", "title": "Quarterly Business Review", "content_focus": "Client, quarter, and executive review context.", "template_variant_key": "cover_split" },
+        { "slide_role": "agenda", "layout_id": "agenda", "title": "QBR Flow", "content_focus": "Value story, adoption health, product usage, risks, and next-quarter priorities." },
+        { "slide_role": "executive_summary", "layout_id": "executive_summary", "title": "Executive Value Readout", "content_focus": "Quarterly value delivered and decisions needed.", "template_variant_key": "summary_list_2col" },
+        { "slide_role": "kpi_scorecard", "layout_id": "adoption_kpi_scorecard", "title": "Quarterly Health Signals", "content_focus": "Current KPI health, licensed coverage, projects, and mobile usage.", "template_variant_key": "kpi_category_summary" },
+        { "slide_role": "usage_trend", "layout_id": "usage_trend", "title": "Adoption Momentum", "content_focus": "Adoption score and active user movement across the quarter.", "template_variant_key": "trend_stacked_chart" },
+        { "slide_role": "feature_adoption", "layout_id": "feature_adoption", "title": "Product Usage Mix", "content_focus": "Workflow usage and strongest or weakest module signals.", "template_variant_key": "feature_table_alt" },
+        { "slide_role": "risks_recommendations", "layout_id": "risks_recommendations", "title": "Value Risks & Decisions", "content_focus": "Risks and sponsor decisions tied to next-quarter value.", "template_variant_key": "risk_actions_3up" },
+        { "slide_role": "next_steps", "layout_id": "next_steps", "title": "Next-Quarter Plan", "content_focus": "Prioritized initiatives and owners for the next quarter.", "template_variant_key": "step_through_1" },
+        { "slide_role": "risks_recommendations", "layout_id": "risks_recommendations", "title": "Expansion Opportunities", "content_focus": "Where client tools and usage patterns suggest follow-up value.", "template_variant_key": "risk_actions_3up_alt" },
+        { "slide_role": "appendix_source_notes", "layout_id": "next_steps", "title": "Source Notes", "content_focus": "Source data and generation controls.", "template_variant_key": "step_through_3" }
+      ]
+    },
+    {
+      "recipe_id": "product_update_deck",
+      "name": "Product Update Deck",
+      "mode": "predefined",
+      "description": "Product update structure that can expand from a concise customer update to a longer release-review deck using approved layouts only.",
+      "audience": "Customer product champions, executive sponsors, operations leaders, and customer success teams",
+      "intent_keywords": ["product update", "product updates", "roadmap", "release", "releases", "launch", "launches", "new feature", "features", "module", "modules", "tools"],
+      "slide_sequence": [
+        { "slide_role": "title", "layout_id": "title_client_report", "title": "Product Update", "content_focus": "Client, period, and targeted product update context.", "template_variant_key": "cover_image_band" },
+        { "slide_role": "agenda", "layout_id": "agenda", "title": "Update Flow", "content_focus": "Audience relevance, client tool fit, release highlights, rollout risks, and next steps." },
+        { "slide_role": "executive_summary", "layout_id": "executive_summary", "title": "Audience Relevance", "content_focus": "Why these updates matter for this client and audience.", "template_variant_key": "summary_list_2col" },
+        { "slide_role": "feature_adoption", "layout_id": "feature_adoption", "title": "Installed Tool Fit", "content_focus": "Owned tools, workflows, and product areas that shape the update.", "template_variant_key": "feature_table_alt" },
+        { "slide_role": "kpi_scorecard", "layout_id": "adoption_kpi_scorecard", "title": "Readiness Signals", "content_focus": "Adoption, active users, projects, and mobile usage that affect rollout readiness.", "template_variant_key": "kpi_point_summary" },
+        { "slide_role": "product_update_section", "layout_id": "next_steps", "title": "Release Highlights", "content_focus": "Chapter divider for grouped product updates.", "template_variant_key": "step_through_1" },
+        { "slide_role": "product_release_detail", "layout_id": "risks_recommendations", "title": "Release Detail", "content_focus": "What changed, why it matters, launch type, region, and client implication.", "template_variant_key": "risk_actions_3up" },
+        { "slide_role": "usage_trend", "layout_id": "usage_trend", "title": "Readiness", "content_focus": "Usage trajectory that supports or limits product rollout.", "template_variant_key": "trend_stacked_chart" },
+        { "slide_role": "risks_recommendations", "layout_id": "risks_recommendations", "title": "Rollout Risks & Enablement", "content_focus": "Risks, enablement needs, and product update actions.", "template_variant_key": "risk_actions_3up_alt" },
+        { "slide_role": "next_steps", "layout_id": "next_steps", "title": "Client-Specific Rollout Plan", "content_focus": "Practical next steps tied to owned tools and active workflows.", "template_variant_key": "step_through_2" },
+        { "slide_role": "appendix_source_notes", "layout_id": "next_steps", "title": "Source Notes", "content_focus": "Source data and generation controls.", "template_variant_key": "step_through_3" }
+      ]
+    },
+    {
       "recipe_id": "ad_hoc_brand_safe_deck",
       "name": "Ad Hoc Brand-Safe Deck",
       "mode": "ad_hoc_blueprint",

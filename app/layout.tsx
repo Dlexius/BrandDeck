@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "BrandDeck Studio",
-  description: "Deterministic brand-governed PowerPoint generation MVP"
+  description: "Brand-governed PowerPoint generation for approved templates"
 };
 
 export default function RootLayout({

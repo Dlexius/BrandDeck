@@ -7,10 +7,8 @@ import {
 } from "@/lib/deck-plan-schema";
 import { DeckRecipeSchema, type DeckRecipe } from "@/lib/deck-recipes";
 import { auditDeckAccuracy } from "@/lib/auditDeckAccuracy";
-import {
-  generateDeckPlan,
-  type AdoptionCsvRow
-} from "@/lib/generateDeckPlan";
+import { type AdoptionCsvRow } from "@/lib/generateDeckPlan";
+import { generateDeckPlanWithOptionalOpenAI } from "@/lib/openaiDeckPlanner";
 import { validateDeckPlan } from "@/lib/validateDeckPlan";
 
 export const runtime = "nodejs";
@@ -30,11 +28,17 @@ export async function POST(request: Request) {
     const csvRows = body.csvRows as AdoptionCsvRow[];
     const sourceDocuments = body.sourceDocuments as SourceDocument[];
     const customRecipes = body.customRecipes as DeckRecipe[];
-    const deckPlan = generateDeckPlan(body.prompt, csvRows, brandContract, {
-      recipeId: body.recipeId,
-      customRecipes,
-      sourceDocuments
-    });
+    const planningResult = await generateDeckPlanWithOptionalOpenAI(
+      body.prompt,
+      csvRows,
+      brandContract,
+      {
+        recipeId: body.recipeId,
+        customRecipes,
+        sourceDocuments
+      }
+    );
+    const deckPlan = planningResult.deckPlan;
     const validationReport = validateDeckPlan(deckPlan, brandContract);
     const accuracyAudit = auditDeckAccuracy({
       deckPlan,
@@ -46,7 +50,10 @@ export async function POST(request: Request) {
       schema: "branddeck.generate-plan/v1",
       deckPlan,
       validationReport,
-      accuracyAudit
+      accuracyAudit,
+      planningMode: planningResult.planningMode,
+      plannerModel: planningResult.plannerModel,
+      plannerFallbackReason: planningResult.fallbackReason
     });
   } catch (error) {
     return NextResponse.json(

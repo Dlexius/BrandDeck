@@ -1,19 +1,20 @@
 # BrandDeck Studio
 
-BrandDeck Studio is a local MVP showing how natural language, approved brand templates, and structured business data can produce a brand-consistent PowerPoint adoption report.
+BrandDeck Studio is a brand-governed presentation workspace showing how natural language, approved templates, and structured business context can produce brand-consistent PowerPoint decks.
 
-The prototype uses a deterministic planner, validator, and renderer boundary:
+The workspace uses a deterministic planner, validator, and renderer boundary:
 
 - The planner creates a structured `DeckPlan` with approved layout IDs only.
-- Business data inputs provide structured account metrics. CSV is the MVP manual input, while future adapters can pull the same fields from Procore, Salesforce, customer-success platforms, or BI exports.
+- When `OPENAI_API_KEY` is present, an optional OpenAI Structured Outputs planner can improve the deck plan inside the same schema and guardrails. If the AI plan fails validation or data-grounding checks, BrandDeck automatically falls back to deterministic planning.
+- Account snapshot inputs provide structured metrics, trend baselines, workflow signals, risks, and recommendations. Future adapters can pull the same fields from CRMs, customer-success platforms, product systems, BI exports, or cloud documents.
 - Optional source context lets creators attach notes, briefs, transcripts, or cloud-drive documents for planner evidence without giving those documents authority over brand design.
 - The validator checks required placeholders, text limits, layout IDs, and chart types against `data/brand-contract.json`.
 - With an uploaded template, the primary renderer clones mapped source slides and edits inherited template text/table objects in place.
-- Without an uploaded template, the fallback renderer uses PptxGenJS to create a Procore-style coordinate export with approved fonts, colors, logo placement, and chart/table geometry.
+- Without an uploaded template, the fallback renderer uses PptxGenJS to create a brand-template coordinate export with approved fonts, colors, logo placement, and chart/table geometry.
 
 ## Why AI Does Not Directly Design Slides
 
-The AI boundary is intentionally narrow. A future OpenAI Structured Outputs call can fill the same deck-plan schema, but it should not choose slide geometry, colors, fonts, logos, or chart styles.
+The AI boundary is intentionally narrow. The OpenAI Structured Outputs planner can fill the same deck-plan schema, but it cannot choose slide geometry, colors, fonts, logos, or chart styles.
 
 That reduces brand drift because the renderer is deterministic. Brand teams approve the contract and layouts once; generation can only populate allowed placeholders and reference approved `layout_id` values.
 
@@ -24,18 +25,18 @@ BrandDeck is designed for two roles:
 - Brand Admin: maintains approved templates, logos, assets, color tokens, fonts, layout IDs, placeholder rules, and review policy.
 - Deck Creator: uses natural language, business data, and approved source context to request a presentation.
 
-Decks can be predefined, such as an adoption report, or ad hoc, such as a customer QBR or executive update. In both cases, the AI-planned deck must validate against the brand contract before rendering. The system can use AI for prompt interpretation, document review, summarization, and deck-plan drafting, but only deterministic renderers can place assets, colors, fonts, charts, and slide geometry.
+Decks can be predefined, such as an adoption report, executive update, risk plan, QBR, or product update, or ad hoc for a new customer-facing topic. In both cases, the AI-planned deck must validate against the brand contract before rendering. The system can use AI for prompt interpretation, document review, summarization, and deck-plan drafting, but only deterministic renderers can place assets, colors, fonts, charts, and slide geometry.
 
-Creator source context is treated as evidence only. Uploaded notes, briefs, transcripts, and future Google Drive/OneDrive/Dropbox documents are bounded, summarized into slide-level `source_refs`, and captured in the deck plan/manifest. They can influence claims, risks, recommendations, and next steps, but they cannot introduce new layouts, colors, typography, imagery, or slide object placement.
+Creator source context and client profiles are treated as evidence only. Known tools, purchased modules, goals, notes, briefs, transcripts, and future Google Drive/OneDrive/Dropbox documents are bounded, summarized into slide-level `source_refs`, and captured in the deck plan/manifest. They can influence claims, risks, recommendations, product relevance, and next steps, but they cannot introduce new layouts, colors, typography, imagery, or slide object placement.
 
 Brand admins can also create local governed deck recipes for new topics and audiences. A custom recipe is only an ordered list of approved `layout_id` values plus routing metadata, so it can support new presentation types without giving creators or AI permission to invent visual structure.
 
-## Included Test Case
+## Reference Brand Case
 
 - `data/brand-contract.json` contains the Procore Demo Brand contract.
-- `data/branddeck-test-client-adoption.csv` contains mock construction-tech adoption data for testing several deck recipes.
 - `public/brand-assets/procore-template/` contains a curated set of PNG assets extracted from the provided 2025 Procore presentation template.
-- `lib/generateDeckPlan.ts` creates the local MVP deck plan.
+- `app/page.tsx` captures creator requests, account snapshots, supporting context, template setup, and admin-governed brand settings.
+- `lib/generateDeckPlan.ts` creates the governed deck plan.
 - `lib/validateDeckPlan.ts` audits plan compliance.
 - `data/agent-orchestration-contract.json` defines the future OpenAI/subagent workflow, allowed outputs, forbidden outputs, and deterministic release gates.
 - `lib/renderPptx.ts` renders the final `.pptx` with approved template fonts, wordmarks, texture backgrounds, imagery, and icon assets.
@@ -55,7 +56,7 @@ Brand admins can also create local governed deck recipes for new topics and audi
 - `app/api/clone-edit/route.ts` exports a data-filled clone/edit deck by editing known inherited text boxes and table cells inside those cloned source slides.
 - `app/api/template-governance/route.ts` returns the admin-facing edit-target coverage report used by the UI.
 - `app/api/template-object-map/route.ts` exports a standalone editable object map with source slides, object IDs, data bindings, required flags, and renderer boundary language.
-- `app/page.tsx` includes the creator deck request flow, source-context intake, template-intake panel, supporting-asset panel, and governed recipe builder so admins can expand reusable deck types while creators stay inside approved brand controls.
+- `app/page.tsx` includes the creator deck request flow, account snapshot intake, source-context intake, template-intake panel, supporting-asset panel, and governed recipe builder so admins can expand reusable deck types while creators stay inside approved brand controls.
 
 ## Drift Control Model
 
@@ -81,18 +82,18 @@ BrandDeck treats every uploaded PPTX as a template kit:
 - Client-copy boundary: validation rejects internal/model/renderer language and inherited placeholder phrases before export.
 - Renderer boundary: AI can fill text/data placeholders, but cannot choose geometry, colors, fonts, or asset placement.
 
-This MVP now exposes two export paths after template intake:
+BrandDeck exposes two export paths after template intake:
 
 - `Export Starter` duplicates the mapped source slides from the uploaded PPTX so the deck skeleton inherits the template's native backgrounds, masters, layouts, media, and slide geometry.
-- `Export Clone/Edit PPTX` duplicates the mapped source slides and fills known inherited text boxes and table cells without letting AI choose geometry, colors, fonts, or asset placement.
+- `Export PPTX` duplicates the mapped source slides and fills known inherited text boxes and table cells without letting AI choose geometry, colors, fonts, or asset placement.
 
-Before clone/edit export, `Prepare Export` validates the deck plan, runs brand preflight, and performs a dry-run audit on the approved template map. The final export uses the same deterministic renderer path.
+Before export, BrandDeck validates the deck plan, runs brand preflight, and performs a dry-run audit on the approved template map. The final export uses the same deterministic renderer path.
 
 The PptxGenJS coordinate renderer remains available as the no-template fallback. The next production step is to expand template edit-target extraction so admins can map more slide types, charts, and document-driven placeholders without code changes.
 
 ## Local Runtime Persistence
 
-This MVP does not require a database. Admin-governed runtime state is saved locally in `.branddeck-runtime/`:
+The current local workspace does not require a database. Admin-governed runtime state is saved locally in `.branddeck-runtime/`:
 
 - `brand-assets.json` stores approved asset metadata and buffers.
 - `template-kits.json` stores indexed template metadata, frame maps, and approval state.
@@ -104,11 +105,11 @@ The folder is intentionally ignored by git because it may contain customer templ
 ## Future Integrations
 
 - Salesforce: pull account, opportunity, renewal, and adoption-health fields into the business-data adapter layer.
-- Procore: enrich adoption rows with project activity, RFI, submittal, daily log, and mobile usage data.
-- Cloud drives: ingest approved Google Drive, OneDrive, Dropbox, Box, or SharePoint documents as source context for the planner.
+- Business systems: enrich account snapshots with product activity, workflow health, renewal, support, and BI data.
+- Cloud drives: extend the source connector pattern to OneDrive, Dropbox, Box, and SharePoint.
 - Google Slides: replace or complement the PptxGenJS renderer with a deterministic Google Slides renderer that maps the same deck plan to approved template layout IDs.
 - Template extractor: parse uploaded PPTX files into approved assets, layout IDs, placeholder rules, and renderer coordinates before any generation is allowed.
-- OpenAI: add a Structured Outputs planner that returns `DeckPlanSchema`; keep validation and rendering unchanged. Future specialist agents are defined in `data/agent-orchestration-contract.json` for intent routing, source review, data analysis, deck planning, copy fit, and compliance review.
+- OpenAI: optional Structured Outputs planning returns `DeckPlanSchema`; validation and rendering stay unchanged. Future specialist agents are defined in `data/agent-orchestration-contract.json` for intent routing, source review, data analysis, deck planning, copy fit, and compliance review.
 
 ## Edge Cases To Guard
 
@@ -130,7 +131,29 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000), upload the Procore PPTX template, load the test CSV, enter a prompt, generate the deck plan, review validation, and export either the cloned template starter or the data-filled clone/edit PowerPoint.
+To enable AI-assisted planning, create `.env.local` from `.env.example` and add your OpenAI key:
+
+```bash
+OPENAI_API_KEY=...
+OPENAI_MODEL=gpt-5.5
+OPENAI_TIMEOUT_MS=120000
+BRANDDECK_USE_OPENAI=true
+```
+
+Leave `OPENAI_API_KEY` empty, or set `BRANDDECK_USE_OPENAI=false`, to use deterministic local planning only.
+
+To enable the Google Drive source connector, create a Google OAuth web client, enable the Google Drive API, add `http://localhost:3000/api/connectors/google-drive/callback` as an authorized redirect URI, and set:
+
+```bash
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REDIRECT_URI=http://localhost:3000/api/connectors/google-drive/callback
+GOOGLE_DRIVE_SCOPES=https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file
+```
+
+The current connector searches Google Docs, Sheets, and Slides, exports selected files as text or CSV, and attaches them to BrandDeck's governed source context. `drive.readonly` powers source discovery and extraction; `drive.file` lets BrandDeck create or manage files it explicitly creates, such as connector test fixtures. For production, the next privacy upgrade is Google Picker plus file-level selection for narrower creator access.
+
+Open [http://localhost:3000](http://localhost:3000), upload or confirm the approved PPTX template, describe the presentation, add account metrics and supporting context, generate the presentation, and export a governed PowerPoint.
 
 A verified sample export that opens cleanly in PowerPoint is available at:
 
