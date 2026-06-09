@@ -2,21 +2,25 @@
 
 BrandDeck Studio is a brand-governed presentation workspace showing how natural language, approved templates, and structured business context can produce brand-consistent PowerPoint decks.
 
-The workspace uses a deterministic planner, validator, and renderer boundary:
+The workspace uses an AI planning layer with governed validation and renderer boundaries:
 
-- The planner creates a structured `DeckPlan` with approved layout IDs only.
-- When `OPENAI_API_KEY` is present, an optional OpenAI Structured Outputs planner can improve the deck plan inside the same schema and guardrails. If the AI plan fails validation or data-grounding checks, BrandDeck automatically falls back to deterministic planning.
+- OpenAI subagent orchestration creates a structured `DeckPlan` with approved layout IDs only.
+- The active generation sequence runs intent routing, source analysis, data analysis, deck planning, fit editing, and compliance review as OpenAI Structured Outputs stages.
+- BrandDeck no longer falls back to deterministic deck generation when OpenAI planning fails. Generation fails closed with a user-facing error so the user can fix context, credentials, or guardrail issues.
 - Account snapshot inputs provide structured metrics, trend baselines, workflow signals, risks, and recommendations. Future adapters can pull the same fields from CRMs, customer-success platforms, product systems, BI exports, or cloud documents.
+- Context packs unify selected client profiles, owned tools, metric snapshots, source documents, prior commitments, and continuity notes so users can generate multiple deck types without rebuilding context.
+- Adaptive planning can expand or compress approved-layout decks based on prompt depth, meeting length, source volume, product update volume, metric history, and client tools.
 - Optional source context lets creators attach notes, briefs, transcripts, or cloud-drive documents for planner evidence without giving those documents authority over brand design.
 - The validator checks required placeholders, text limits, layout IDs, and chart types against `data/brand-contract.json`.
+- Fit and grounding audits run before export so over-capacity content is chunked into continuation slides or blocked before a PPTX is generated.
 - With an uploaded template, the primary renderer clones mapped source slides and edits inherited template text/table objects in place.
-- Without an uploaded template, the fallback renderer uses PptxGenJS to create a brand-template coordinate export with approved fonts, colors, logo placement, and chart/table geometry.
+- Without an uploaded template, the no-template renderer uses PptxGenJS to create a brand-template coordinate export with approved fonts, colors, logo placement, and chart/table geometry.
 
 ## Why AI Does Not Directly Design Slides
 
 The AI boundary is intentionally narrow. The OpenAI Structured Outputs planner can fill the same deck-plan schema, but it cannot choose slide geometry, colors, fonts, logos, or chart styles.
 
-That reduces brand drift because the renderer is deterministic. Brand teams approve the contract and layouts once; generation can only populate allowed placeholders and reference approved `layout_id` values.
+That reduces brand drift because the renderer is governed by the brand contract. Brand teams approve the contract and layouts once; generation can only populate allowed placeholders and reference approved `layout_id` values.
 
 ## User Model
 
@@ -25,7 +29,7 @@ BrandDeck is designed for two roles:
 - Brand Admin: maintains approved templates, logos, assets, color tokens, fonts, layout IDs, placeholder rules, and review policy.
 - Deck Creator: uses natural language, business data, and approved source context to request a presentation.
 
-Decks can be predefined, such as an adoption report, executive update, risk plan, QBR, or product update, or ad hoc for a new customer-facing topic. In both cases, the AI-planned deck must validate against the brand contract before rendering. The system can use AI for prompt interpretation, document review, summarization, and deck-plan drafting, but only deterministic renderers can place assets, colors, fonts, charts, and slide geometry.
+Decks can be predefined, such as an adoption report, executive update, risk plan, QBR, or product update, or ad hoc for a new customer-facing topic. In both cases, the AI-planned deck must validate against the brand contract before rendering. The system can use AI for prompt interpretation, document review, summarization, and deck-plan drafting, while governed renderers place assets, colors, fonts, charts, and slide geometry from approved template rules only.
 
 Creator source context and client profiles are treated as evidence only. Known tools, purchased modules, goals, notes, briefs, transcripts, and future Google Drive/OneDrive/Dropbox documents are bounded, summarized into slide-level `source_refs`, and captured in the deck plan/manifest. They can influence claims, risks, recommendations, product relevance, and next steps, but they cannot introduce new layouts, colors, typography, imagery, or slide object placement.
 
@@ -37,15 +41,19 @@ Brand admins can also create local governed deck recipes for new topics and audi
 - `public/brand-assets/procore-template/` contains a curated set of PNG assets extracted from the provided 2025 Procore presentation template.
 - `app/page.tsx` captures creator requests, account snapshots, supporting context, template setup, and admin-governed brand settings.
 - `lib/generateDeckPlan.ts` creates the governed deck plan.
+- `lib/context-pack-schema.ts` defines the client/context/metric pack that powers adaptive generation.
+- `lib/deck-section-planner.ts` infers deck depth and adaptive slide budget from prompt and context.
+- `lib/deck-content-chunker.ts` moves overflow content into continuation slides using approved layouts.
 - `lib/validateDeckPlan.ts` audits plan compliance.
-- `data/agent-orchestration-contract.json` defines the future OpenAI/subagent workflow, allowed outputs, forbidden outputs, and deterministic release gates.
+- `lib/auditDeckAccuracy.ts` and `lib/auditDeckFit.ts` gate content grounding and layout fit before export.
+- `data/agent-orchestration-contract.json` defines the active OpenAI/subagent workflow, allowed outputs, forbidden outputs, and release gates.
 - `lib/renderPptx.ts` renders the final `.pptx` with approved template fonts, wordmarks, texture backgrounds, imagery, and icon assets.
 - `app/api/template-intake/route.ts` turns an uploaded PPTX into an in-memory template kit with a SHA-256 fingerprint, slide/layout/media counts, detected fonts, detected colors, and asset inventory.
 - `app/api/brand-assets/route.ts` fingerprints uploaded PNG, JPG, and SVG brand assets, infers asset roles, records dimensions, and keeps them in a local governed inventory.
 - `app/api/brand-assets/route.ts?id=...` serves governed uploaded asset previews with fingerprint, role, and status headers so admins can visually inspect approved assets.
 - `app/api/brand-preflight/route.ts` combines template lock, asset readiness, frame-map coverage, edit governance, and deck-plan validation into one export readiness report.
 - `app/api/brand-kit-manifest/route.ts` exports a portable JSON control artifact containing the brand contract summary, template fingerprint, uploaded asset inventory, frame map, edit governance, preflight, and deck-plan summary.
-- `lib/brand-asset-store.ts` stores uploaded brand assets in memory with drift guards that require deterministic renderer placement and prevent AI-invented replacements.
+- `lib/brand-asset-store.ts` stores uploaded brand assets in memory with drift guards that require governed renderer placement and prevent AI-invented replacements.
 - `lib/local-runtime-store.ts` provides ignored local runtime persistence under `.branddeck-runtime/` so uploaded templates, original PPTX buffers, governed asset buffers, roles, and approvals can survive dev-server restarts without adding a database.
 - `lib/custom-recipe-store.ts` persists admin-created deck recipes through the same local runtime store, with every recipe validated against approved layout IDs.
 - `lib/brand-preflight.ts` defines the deterministic preflight gate used before clone/edit export.
@@ -87,9 +95,9 @@ BrandDeck exposes two export paths after template intake:
 - `Export Starter` duplicates the mapped source slides from the uploaded PPTX so the deck skeleton inherits the template's native backgrounds, masters, layouts, media, and slide geometry.
 - `Export PPTX` duplicates the mapped source slides and fills known inherited text boxes and table cells without letting AI choose geometry, colors, fonts, or asset placement.
 
-Before export, BrandDeck validates the deck plan, runs brand preflight, and performs a dry-run audit on the approved template map. The final export uses the same deterministic renderer path.
+Before export, BrandDeck validates the deck plan, runs brand preflight, and performs a dry-run audit on the approved template map. The final export uses the same governed renderer path.
 
-The PptxGenJS coordinate renderer remains available as the no-template fallback. The next production step is to expand template edit-target extraction so admins can map more slide types, charts, and document-driven placeholders without code changes.
+The PptxGenJS coordinate renderer remains available when no template has been uploaded. The next production step is to expand template edit-target extraction so admins can map more slide types, charts, and document-driven placeholders without code changes.
 
 ## Local Runtime Persistence
 
@@ -131,7 +139,7 @@ npm install
 npm run dev
 ```
 
-To enable AI-assisted planning, create `.env.local` from `.env.example` and add your OpenAI key:
+To enable generation, create `.env.local` from `.env.example` and add your OpenAI key:
 
 ```bash
 OPENAI_API_KEY=...
@@ -140,7 +148,7 @@ OPENAI_TIMEOUT_MS=120000
 BRANDDECK_USE_OPENAI=true
 ```
 
-Leave `OPENAI_API_KEY` empty, or set `BRANDDECK_USE_OPENAI=false`, to use deterministic local planning only.
+`OPENAI_API_KEY` is required for deck generation. Setting `BRANDDECK_USE_OPENAI=false` disables generation rather than switching to rules-only planning. The governed renderer, validators, audits, and template export gates still enforce brand safety after the AI subagents produce the deck plan.
 
 To enable the Google Drive source connector, create a Google OAuth web client, enable the Google Drive API, add `http://localhost:3000/api/connectors/google-drive/callback` as an authorized redirect URI, and set:
 
@@ -163,7 +171,7 @@ A verified sample export that opens cleanly in PowerPoint is available at:
 
 ## Quality Gates
 
-Run the deterministic export quality suite before changing planner, renderer,
+Run the export quality suite before changing planner, renderer,
 asset, recipe, or validation logic:
 
 ```bash
@@ -171,6 +179,8 @@ npm run test:quality
 ```
 
 The suite verifies that brand-contract assets exist, every approved deck recipe
-generates a valid and data-accurate plan, fallback PPTX exports embed brand
-media, package audits catch broken exports, and internal/model copy is rejected
-before export.
+generates a valid and data-accurate plan, context packs can drive source-only
+decks, adaptive product update decks can expand beyond 10 slides, over-capacity
+content chunks before fit approval, no-template PPTX exports embed brand media,
+package audits catch broken exports, and internal/model copy is rejected before
+export.

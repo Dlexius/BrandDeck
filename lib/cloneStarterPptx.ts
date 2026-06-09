@@ -331,7 +331,11 @@ function setDrawingGeometryById(
 function setTextShapeStyleById(
   xml: string,
   shapeId: string,
-  options: { fontSize?: number; paragraphSpacingAfter?: number }
+  options: {
+    fontSize?: number;
+    paragraphSpacingAfter?: number;
+    lineSpacingPct?: number;
+  }
 ) {
   return replaceDrawingElementById(xml, "sp", shapeId, (shapeXml) => {
     let nextXml = shapeXml;
@@ -350,8 +354,314 @@ function setTextShapeStyleById(
       );
     }
 
+    if (options.lineSpacingPct !== undefined) {
+      nextXml = nextXml.replace(
+        /<a:lnSpc><a:spcPct val="[^"]*"\/><\/a:lnSpc>/g,
+        `<a:lnSpc><a:spcPct val="${options.lineSpacingPct}"/></a:lnSpc>`
+      );
+    }
+
     return nextXml;
   });
+}
+
+function titleCoverFontSize(value: string) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  const wordCount = normalized ? normalized.split(" ").length : 0;
+  const score = normalized.length + Math.max(0, wordCount - 2) * 4;
+
+  if (score <= 18) {
+    return 14400;
+  }
+
+  if (score <= 32) {
+    return 11200;
+  }
+
+  if (score <= 38) {
+    return 10000;
+  }
+
+  if (score <= 50) {
+    return 8800;
+  }
+
+  return 7600;
+}
+
+function slideHeadlineFontSize(value: string) {
+  const length = value.replace(/\s+/g, " ").trim().length;
+
+  if (length <= 20) {
+    return 6400;
+  }
+
+  if (length <= 26) {
+    return 5600;
+  }
+
+  if (length <= 34) {
+    return 5000;
+  }
+
+  if (length <= 44) {
+    return 4400;
+  }
+
+  return 3800;
+}
+
+function denseBodyFontSize(value: string, baseFontSize: number) {
+  const length = value.replace(/\s+/g, " ").trim().length;
+
+  if (length <= 58) {
+    return baseFontSize;
+  }
+
+  if (length <= 78) {
+    return Math.min(baseFontSize, 3200);
+  }
+
+  if (length <= 105) {
+    return Math.min(baseFontSize, 3000);
+  }
+
+  return Math.min(baseFontSize, 2600);
+}
+
+function actionCardFontSize(value: string) {
+  const length = value.replace(/\s+/g, " ").trim().length;
+
+  if (length <= 62) {
+    return 2400;
+  }
+
+  if (length <= 86) {
+    return 2200;
+  }
+
+  return 2000;
+}
+
+const TITLE_VARIANT_SLOTS: Partial<
+  Record<
+    number,
+    {
+      titleId: string;
+      subtitleId: string;
+      preparedId?: string;
+      subtitleLongTitleY?: number;
+      preparedLongTitleY?: number;
+    }
+  >
+> = {
+  8: {
+    titleId: "2401",
+    subtitleId: "2402",
+    preparedId: "2405",
+    subtitleLongTitleY: 5060000,
+    preparedLongTitleY: 6900000
+  },
+  10: {
+    titleId: "2418",
+    subtitleId: "2419",
+    preparedId: "2421",
+    subtitleLongTitleY: 4960000,
+    preparedLongTitleY: 6780000
+  },
+  11: {
+    titleId: "2427",
+    subtitleId: "2428",
+    preparedId: "2430",
+    subtitleLongTitleY: 5060000,
+    preparedLongTitleY: 6900000
+  },
+  12: {
+    titleId: "2435",
+    subtitleId: "2436",
+    preparedId: "2438",
+    subtitleLongTitleY: 5060000,
+    preparedLongTitleY: 6900000
+  }
+};
+
+const SLIDE_HEADLINE_IDS: Partial<Record<number, string[]>> = {
+  30: ["2633"],
+  31: ["2640"],
+  40: ["2736"],
+  129: ["4629"],
+  132: ["4671"],
+  75: ["3328"],
+  76: ["3345"],
+  79: ["3401"],
+  80: ["3419"]
+};
+
+function applyTitleCoverFitGuards(xml: string, slide: DeckSlide, sourceSlide: number) {
+  const slots = TITLE_VARIANT_SLOTS[sourceSlide];
+
+  if (!slots) {
+    return xml;
+  }
+
+  const title = String(slide.fields.client_name ?? slide.title);
+  const subtitle = String(slide.fields.subtitle ?? "");
+  const titleFontSize = titleCoverFontSize(title);
+  const subtitleFontSize = subtitle.length > 86 ? 2400 : 2800;
+  let nextXml = setTextShapeStyleById(xml, slots.titleId, {
+    fontSize: titleFontSize,
+    lineSpacingPct: titleFontSize <= 10000 ? 74000 : 78000
+  });
+
+  nextXml = setTextShapeStyleById(nextXml, slots.subtitleId, {
+    fontSize: subtitleFontSize,
+    lineSpacingPct: 105000
+  });
+
+  if (titleFontSize <= 10000 && slots.subtitleLongTitleY !== undefined) {
+    nextXml = setDrawingGeometryById(nextXml, "sp", slots.subtitleId, {
+      y: slots.subtitleLongTitleY,
+      cy: 1120000
+    });
+  }
+
+  if (
+    titleFontSize <= 10000 &&
+    slots.preparedId &&
+    slots.preparedLongTitleY !== undefined
+  ) {
+    nextXml = setDrawingGeometryById(nextXml, "sp", slots.preparedId, {
+      y: slots.preparedLongTitleY
+    });
+  }
+
+  return nextXml;
+}
+
+function applySlideHeadlineFitGuards(xml: string, slide: DeckSlide, sourceSlide: number) {
+  const titleIds = SLIDE_HEADLINE_IDS[sourceSlide] ?? [];
+
+  if (titleIds.length === 0) {
+    return xml;
+  }
+
+  const fontSize = slideHeadlineFontSize(slide.title);
+
+  return titleIds.reduce(
+    (nextXml, shapeId) =>
+      setTextShapeStyleById(nextXml, shapeId, {
+        fontSize,
+        lineSpacingPct: 88000
+      }),
+    xml
+  );
+}
+
+function applyDenseContentFitGuards(xml: string, slide: DeckSlide, sourceSlide: number) {
+  if (slide.layout_id === "executive_summary") {
+    if (sourceSlide === 30) {
+      const combinedSummary = summaryWithImpact(slide).join(" ");
+
+      return setTextShapeStyleById(xml, "2625", {
+        fontSize: denseBodyFontSize(combinedSummary, 3600),
+        lineSpacingPct: 94000
+      });
+    }
+
+    if (sourceSlide === 31) {
+      const summaryPoints = asStringArray(slide.fields.summary_points);
+      const firstGroup = summaryPoints.slice(0, 2).join(" ");
+      const secondGroup = summaryPoints.slice(2, 4).join(" ");
+      let nextXml = setTextShapeStyleById(xml, "2641", {
+        fontSize: denseBodyFontSize(String(slide.fields.business_impact ?? ""), 3600),
+        lineSpacingPct: 94000
+      });
+
+      nextXml = setTextShapeStyleById(nextXml, "2639", {
+        fontSize: denseBodyFontSize(firstGroup, 3600),
+        lineSpacingPct: 94000
+      });
+
+      return setTextShapeStyleById(nextXml, "2645", {
+        fontSize: denseBodyFontSize(secondGroup, 3600),
+        lineSpacingPct: 94000
+      });
+    }
+  }
+
+  if (slide.layout_id === "agenda") {
+    const agendaItems = asStringArray(slide.fields.agenda_items);
+    const agendaItemShapeIds = ["2465", "2468", "2470", "2472", "2474", "2476"];
+
+    return agendaItemShapeIds.reduce((nextXml, shapeId, index) => {
+      const item = agendaItems[index] ?? "";
+      const fontSize = item.length > 48 ? 2800 : 3200;
+
+      return setTextShapeStyleById(nextXml, shapeId, {
+        fontSize,
+        lineSpacingPct: 92000
+      });
+    }, xml);
+  }
+
+  if (slide.layout_id === "risks_recommendations") {
+    const bodyShapeIds =
+      sourceSlide === 76
+        ? ["3347", "3349", "3351"]
+        : sourceSlide === 75
+          ? ["3330", "3332", "3334"]
+          : [];
+    const bodyLines = [
+      String(slide.fields.risk_summary ?? ""),
+      ...asStringArray(slide.fields.recommendations).slice(0, 2)
+    ];
+
+    return bodyShapeIds.reduce((nextXml, shapeId, index) => {
+      const fontSize = denseBodyFontSize(bodyLines[index] ?? "", 3600);
+
+      return setTextShapeStyleById(nextXml, shapeId, {
+        fontSize,
+        lineSpacingPct: 96000
+      });
+    }, xml);
+  }
+
+  if (slide.layout_id === "next_steps") {
+    const stepShapeIds =
+      sourceSlide === 79
+        ? ["3407", "3408", "3409"]
+        : sourceSlide === 80
+          ? ["3425", "3426", "3427"]
+          : [];
+    const steps = asStringArray(slide.fields.steps);
+
+    return stepShapeIds.reduce((nextXml, shapeId, index) => {
+      const fontSize = actionCardFontSize(steps[index] ?? "");
+
+      return setTextShapeStyleById(nextXml, shapeId, {
+        fontSize,
+        lineSpacingPct: 98000
+      });
+    }, xml);
+  }
+
+  return xml;
+}
+
+function applyTemplateTextFitGuards(
+  xml: string,
+  slide: DeckSlide,
+  sourceSlide: number
+) {
+  return applyDenseContentFitGuards(
+    applySlideHeadlineFitGuards(
+      applyTitleCoverFitGuards(xml, slide, sourceSlide),
+      slide,
+      sourceSlide
+    ),
+    slide,
+    sourceSlide
+  );
 }
 
 function applyStackedTrendLayoutPolish(xml: string) {
@@ -708,7 +1018,7 @@ function linesForDataBinding(
     case "fields.subtitle":
       return [String(slide.fields.subtitle ?? "Brand-governed customer report")];
     case "fields.report_period":
-      return [""];
+      return [String(slide.fields.report_period ?? "")];
     case "fields.business_impact":
       return [String(slide.fields.business_impact ?? "")];
     case "fields.business_impact_and_summary_points":
@@ -806,8 +1116,84 @@ function buildManifestEditTargets(
       shapeId: target.objectId,
       objectType: target.objectType,
       lines: linesForDataBinding(target, slide, outputSlide),
-      clearWhenEmpty: !target.required || target.dataBinding === "fields.report_period"
+      clearWhenEmpty: !target.required
     }));
+}
+
+export type CloneEditBindingAudit = {
+  passed: boolean;
+  checks: Array<{
+    id: string;
+    label: string;
+    passed: boolean;
+    detail: string;
+    slideTitle?: string;
+  }>;
+};
+
+export function auditCloneEditBindings({
+  templateKit,
+  frameMapArtifact,
+  deckPlan,
+  allowLocalFallback = false
+}: {
+  templateKit: TemplateKit;
+  frameMapArtifact: TemplateFrameMapArtifact;
+  deckPlan: DeckPlan;
+  allowLocalFallback?: boolean;
+}): CloneEditBindingAudit {
+  const localFallbackAllowed =
+    allowLocalFallback && process.env.NODE_ENV !== "production";
+  const checks: CloneEditBindingAudit["checks"] = [];
+
+  frameMapArtifact.outputSlides.forEach((mapping, index) => {
+    const slide = deckPlan.slides[index];
+    const targets = slide
+      ? targetsForLayout(slide.layout_id, templateKit).filter(
+          (target) => target.sourceSlide === mapping.sourceSlide
+        )
+      : [];
+
+    checks.push({
+      id: `slide-${mapping.outputSlide}:binding-map`,
+      label: "Approved object bindings",
+      passed: targets.length > 0 || localFallbackAllowed,
+      detail:
+        targets.length > 0
+          ? `${targets.length} governed object binding(s) found.`
+          : localFallbackAllowed
+            ? "No object bindings found; local fallback explicitly allowed."
+            : "No approved object bindings found for this mapped slide.",
+      slideTitle: slide?.title
+    });
+
+    targets
+      .filter((target) => target.required)
+      .forEach((target) => {
+        const lines = slide
+          ? normalizeTextLines(
+              linesForDataBinding(target, slide, mapping.outputSlide),
+              false
+            )
+          : [];
+        const hasContent = lines.some((line) => String(line).trim().length > 0);
+
+        checks.push({
+          id: `slide-${mapping.outputSlide}:${target.objectId}:${target.dataBinding}`,
+          label: `Required binding: ${target.role}`,
+          passed: hasContent,
+          detail: hasContent
+            ? `${target.dataBinding} resolves to client-visible content.`
+            : `${target.dataBinding} resolves empty for object ${target.objectId}.`,
+          slideTitle: slide?.title
+        });
+      });
+  });
+
+  return {
+    passed: checks.every((check) => check.passed),
+    checks
+  };
 }
 
 function buildChromeEditTargets(slide: DeckSlide, outputSlide: number): SlideEditTarget[] {
@@ -899,8 +1285,7 @@ function buildLegacySlideEditTargets(
         },
         {
           shapeId: "2429",
-          lines: [""],
-          clearWhenEmpty: true
+          lines: [String(slide.fields.report_period ?? "")]
         },
         { shapeId: "2430", lines: [preparedForLine()] }
       ];
@@ -1030,6 +1415,8 @@ function applyDeckPlanEdits(
 
     return replaceShapeTextById(xml, target.shapeId, lines);
   }, slideXml);
+
+  editedXml = applyTemplateTextFitGuards(editedXml, slide, sourceSlide);
 
   if (slide.layout_id === "usage_trend" && sourceSlide === 129) {
     editedXml = applyStackedTrendLayoutPolish(editedXml);

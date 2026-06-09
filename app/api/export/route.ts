@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getActiveBrandContract } from "@/lib/brand-contract-store";
+import { auditDeckFit } from "@/lib/auditDeckFit";
 import { DeckPlanSchema } from "@/lib/deck-plan-schema";
 import { renderPptx } from "@/lib/renderPptx";
 import {
@@ -41,6 +42,18 @@ export async function POST(request: Request) {
         {
           error: "Deck plan failed brand validation.",
           validationReport
+        },
+        { status: 422 }
+      );
+    }
+
+    const fitAudit = auditDeckFit({ deckPlan, brandContract });
+
+    if (!fitAudit.passed) {
+      return NextResponse.json(
+        {
+          error: "Deck plan failed layout fit audit.",
+          fitAudit
         },
         { status: 422 }
       );

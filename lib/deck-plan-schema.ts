@@ -42,6 +42,14 @@ export const SourcePackSummarySchema = z.object({
   constraints: z.array(z.string().min(1).max(160)).max(12)
 });
 
+export const OmittedEvidenceSchema = z.object({
+  id: z.string().min(1).max(120),
+  reason: z.string().min(1).max(220),
+  content_type: z.string().min(1).max(80),
+  item_count: z.number().int().min(1).max(999),
+  source_ref: z.string().min(1).max(160).optional()
+});
+
 export const DeckPlanSchema = z.object({
   deck_type: z.string().min(1).max(80),
   deck_recipe_id: z.string().min(1).max(80).optional(),
@@ -52,12 +60,14 @@ export const DeckPlanSchema = z.object({
   client_name: z.string().min(1).max(80),
   report_period: z.string().min(1).max(60),
   source_pack: SourcePackSummarySchema.optional(),
+  omitted_evidence: z.array(OmittedEvidenceSchema).max(80).optional(),
   slides: z.array(DeckSlideSchema).min(1).max(MAX_DECK_SLIDES)
 });
 
 export type ApprovedLayoutId = (typeof APPROVED_LAYOUT_IDS)[number];
 export type SourceDocument = z.infer<typeof SourceDocumentSchema>;
 export type SourcePackSummary = z.infer<typeof SourcePackSummarySchema>;
+export type OmittedEvidence = z.infer<typeof OmittedEvidenceSchema>;
 export type DeckSlide = z.infer<typeof DeckSlideSchema>;
 export type DeckPlan = z.infer<typeof DeckPlanSchema>;
 

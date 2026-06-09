@@ -1,6 +1,6 @@
 {
   "schema": "branddeck.agent-orchestration/v1",
-  "status": "future_openai_ready",
+  "status": "active_openai_subagent_orchestration",
   "principle": "AI may interpret intent, analyze sources, draft structured plans, and revise copy for fit. AI may not choose slide geometry, colors, fonts, logos, chart styling, asset placement, or PowerPoint object IDs.",
   "required_inputs": [
     "brand_contract",

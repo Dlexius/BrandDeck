@@ -1,4 +1,12 @@
 import type { DeckPlan, DeckSlide, SourceDocument } from "@/lib/deck-plan-schema";
+import {
+  contextPackToMetricRows,
+  metricDatumsByKey,
+  normalizedMetricKey,
+  numericMetricValue,
+  standardMetricKeys,
+  type ContextPack
+} from "@/lib/context-pack-schema";
 import type { AdoptionCsvRow } from "@/lib/generateDeckPlan";
 
 export type DeckAccuracyCheck = {
@@ -319,7 +327,103 @@ function checkTrendFacts(deckPlan: DeckPlan, rows: NormalizedRow[]) {
   ];
 }
 
-function checkFeatureFacts(deckPlan: DeckPlan, current: NormalizedRow) {
+function contextMetricExpectations(contextPack?: ContextPack) {
+  const expectations = new Map<string, number>();
+  const standardKeys = standardMetricKeys();
+
+  for (const [key, metrics] of metricDatumsByKey(contextPack)) {
+    const metric = metrics[metrics.length - 1];
+    const value = metric ? numericMetricValue(metric) : Number.NaN;
+
+    if (!metric || !Number.isFinite(value)) {
+      continue;
+    }
+
+    expectations.set(key, Math.round(value));
+
+    if (metric.label) {
+      expectations.set(normalizedMetricKey(metric.label), Math.round(value));
+    }
+
+    if (!standardKeys.has(key) && metric.label) {
+      expectations.set(normalizedMetricKey(metric.label.replace(/\s+count$/i, "")), Math.round(value));
+    }
+  }
+
+  return expectations;
+}
+
+function legacyFeatureExpectations(current: NormalizedRow) {
+  const expectations = new Map<string, number>();
+
+  if (current.daily_logs_count > 0) {
+    expectations.set("daily_logs", current.daily_logs_count);
+  }
+
+  if (current.rfi_count > 0) {
+    expectations.set("rfis", current.rfi_count);
+    expectations.set("rfi", current.rfi_count);
+  }
+
+  if (current.submittals_count > 0) {
+    expectations.set("submittals", current.submittals_count);
+  }
+
+  return expectations;
+}
+
+function contextRateExpectations(contextPack?: ContextPack) {
+  const expectations = new Map<string, number>();
+
+  for (const [key, metrics] of metricDatumsByKey(contextPack)) {
+    if (!/(^|_)(rate|percent|percentage)$/.test(key)) {
+      continue;
+    }
+
+    const metric = metrics[metrics.length - 1];
+    const value = metric ? numericMetricValue(metric) : Number.NaN;
+
+    if (!metric || !Number.isFinite(value)) {
+      continue;
+    }
+
+    const roundedValue = Math.round(value);
+    const baseKeys = new Set([
+      key,
+      key.replace(/_usage_rate$/, "_usage"),
+      key.replace(/_usage_rate$/, ""),
+      key.replace(/_(rate|percent|percentage)$/, "")
+    ]);
+
+    for (const baseKey of baseKeys) {
+      if (baseKey) {
+        expectations.set(baseKey, roundedValue);
+      }
+    }
+
+    if (metric.label) {
+      const labelKey = normalizedMetricKey(metric.label);
+      expectations.set(labelKey, roundedValue);
+      expectations.set(
+        labelKey.replace(/_usage_rate$/, "_usage"),
+        roundedValue
+      );
+      expectations.set(labelKey.replace(/_usage_rate$/, ""), roundedValue);
+      expectations.set(
+        labelKey.replace(/_(rate|percent|percentage)$/, ""),
+        roundedValue
+      );
+    }
+  }
+
+  return expectations;
+}
+
+function checkFeatureFacts(
+  deckPlan: DeckPlan,
+  current: NormalizedRow,
+  contextPack?: ContextPack
+) {
   const slide = slideByLayout(deckPlan, "feature_adoption");
 
   if (!slide) {
@@ -336,17 +440,56 @@ function checkFeatureFacts(deckPlan: DeckPlan, current: NormalizedRow) {
   const metrics = Array.isArray(slide.fields.feature_metrics)
     ? (slide.fields.feature_metrics as Array<Record<string, unknown>>)
     : [];
-  const expected: Record<string, number> = {
-    "Daily Logs": current.daily_logs_count,
-    RFIs: current.rfi_count,
-    Submittals: current.submittals_count
-  };
+  const expected = new Map([
+    ...legacyFeatureExpectations(current),
+    ...contextMetricExpectations(contextPack)
+  ]);
+  const rateExpected = contextRateExpectations(contextPack);
 
-  return Object.entries(expected).map(([feature, expectedCount]) => {
-    const actual = metrics.find((metric) => metric.feature === feature)?.count;
+  if (expected.size === 0) {
+    return [
+      check(
+        "feature:flexible-source",
+        "Flexible feature metrics",
+        true,
+        "Feature metrics are source/context-derived; no legacy adoption feature fields were required.",
+        slide.title
+      )
+    ];
+  }
+
+  return metrics.map((metric) => {
+    const feature = String(metric.feature ?? "");
+    const key = normalizedMetricKey(feature);
+    const expectedCount = expected.get(key);
+    const actual = metric.count;
+    const rateValue = rateExpected.get(key);
+
+    if (
+      rateValue !== undefined &&
+      toNumber(actual, Number.NaN) === rateValue
+    ) {
+      return check(
+        `feature:rate-as-count:${key || "metric"}`,
+        `${feature || "Feature"} rate not shown as count`,
+        false,
+        `Feature tables display count rows; ${feature || "this metric"} matches a rate/percentage value (${rateValue}) and should move to narrative or a KPI field.`,
+        slide.title
+      );
+    }
+
+    if (expectedCount === undefined) {
+      return check(
+        `feature:flexible:${key || "metric"}`,
+        `${feature || "Feature"} metric`,
+        true,
+        "Metric is not one of the legacy adoption fields and is allowed as a flexible context metric.",
+        slide.title
+      );
+    }
 
     return check(
-      `csv:feature:${feature}`,
+      `metric:feature:${feature}`,
       `${feature} count`,
       toNumber(actual, Number.NaN) === expectedCount,
       `Expected ${expectedCount}; deck plan has ${actual ?? "missing"}.`,
@@ -383,21 +526,29 @@ function checkSourceGrounding(
     /^\s*(recommendation|next step|action):/i,
     /\b(recommend|next step|action|owner|mitigate|enable|train|review)\b/i
   );
+  const explicitSourceActions = safeSourceSentences(
+    sourceDocuments,
+    /^\s*(recommendation|next step|action):/i
+  );
   const sourceRisks = prioritizedSafeSourceSentences(
     sourceDocuments,
     /^\s*(risk|blocker|concern|gap|issue):/i,
     /\b(risk|blocker|concern|gap|delay|late|stalled|issue|low|lowest)\b/i
+  );
+  const explicitSourceRisks = safeSourceSentences(
+    sourceDocuments,
+    /^\s*(risk|blocker|concern|gap|issue):/i
   );
 
   checks.push(
     check(
       "source-grounding:action",
       "Source action reflected",
-      sourceActions.length === 0 ||
+      explicitSourceActions.length === 0 ||
         sourceActions.some((sentence) => visibleContainsSentence(deckText, sentence)),
-      sourceActions.length === 0
-        ? "No safe action sentence found in source documents."
-        : "At least one safe source action appears in client-visible deck copy."
+      explicitSourceActions.length === 0
+        ? "No explicit source action line required reflection."
+        : "At least one explicit safe source action appears in client-visible deck copy."
     )
   );
 
@@ -405,11 +556,11 @@ function checkSourceGrounding(
     check(
       "source-grounding:risk",
       "Source risk reflected",
-      sourceRisks.length === 0 ||
+      explicitSourceRisks.length === 0 ||
         sourceRisks.some((sentence) => visibleContainsSentence(deckText, sentence)),
-      sourceRisks.length === 0
-        ? "No safe risk sentence found in source documents."
-        : "At least one safe source risk appears in client-visible deck copy."
+      explicitSourceRisks.length === 0
+        ? "No explicit source risk line required reflection."
+        : "At least one explicit safe source risk appears in client-visible deck copy."
     )
   );
 
@@ -419,27 +570,43 @@ function checkSourceGrounding(
 export function auditDeckAccuracy({
   deckPlan,
   parsedCsvData,
-  sourceDocuments = []
+  sourceDocuments = [],
+  contextPack
 }: {
   deckPlan: DeckPlan;
-  parsedCsvData: AdoptionCsvRow[];
+  parsedCsvData?: AdoptionCsvRow[];
   sourceDocuments?: SourceDocument[];
+  contextPack?: ContextPack;
 }): DeckAccuracyAudit {
-  const rows = selectedRows(parsedCsvData);
+  const metricRows =
+    parsedCsvData && parsedCsvData.length > 0
+      ? parsedCsvData
+      : (contextPackToMetricRows(contextPack) as AdoptionCsvRow[]);
+  const rows = selectedRows(metricRows);
   const current = rows[rows.length - 1];
   const checks: DeckAccuracyCheck[] = [];
 
-  if (!current) {
+  if (!current || !hasMetricSignal(current)) {
     checks.push(
-      check("csv:rows", "CSV rows", false, "No CSV rows were available to audit.")
+      check(
+        "metrics:optional",
+        "Metric grounding",
+        true,
+        "No strict adoption metric checks were required for this source/context deck."
+      )
     );
   } else {
     checks.push(...checkKpiFacts(deckPlan, current));
     checks.push(...checkTrendFacts(deckPlan, rows));
-    checks.push(...checkFeatureFacts(deckPlan, current));
+    checks.push(...checkFeatureFacts(deckPlan, current, contextPack));
   }
 
-  checks.push(...checkSourceGrounding(deckPlan, sourceDocuments));
+  checks.push(
+    ...checkSourceGrounding(
+      deckPlan,
+      sourceDocuments.length > 0 ? sourceDocuments : contextPack?.sourceDocuments ?? []
+    )
+  );
 
   const passed = checks.filter((item) => item.passed).length;
   const accuracyScore = Math.round((passed / Math.max(checks.length, 1)) * 100);

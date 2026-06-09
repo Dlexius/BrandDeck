@@ -5,21 +5,39 @@ import {
   SourceDocumentSchema,
   type SourceDocument
 } from "@/lib/deck-plan-schema";
-import { DeckRecipeSchema, type DeckRecipe } from "@/lib/deck-recipes";
+import {
+  DeckRecipeSchema,
+  selectDeckRecipe,
+  type DeckRecipe
+} from "@/lib/deck-recipes";
 import { auditDeckAccuracy } from "@/lib/auditDeckAccuracy";
+import { auditDeckFit } from "@/lib/auditDeckFit";
+import {
+  buildContextPackFromInputs,
+  contextPackHasAdoptionMetrics,
+  ContextPackSchema
+} from "@/lib/context-pack-schema";
 import { type AdoptionCsvRow } from "@/lib/generateDeckPlan";
-import { generateDeckPlanWithOptionalOpenAI } from "@/lib/openaiDeckPlanner";
+import { generateDeckPlanWithOpenAISubagents } from "@/lib/openaiDeckPlanner";
 import { validateDeckPlan } from "@/lib/validateDeckPlan";
 
 export const runtime = "nodejs";
 
 const GeneratePlanRequestSchema = z.object({
   prompt: z.string().max(1000).default(""),
-  csvRows: z.array(z.record(z.unknown())).min(1),
+  csvRows: z.array(z.record(z.unknown())).default([]),
+  contextPack: ContextPackSchema.optional(),
   recipeId: z.string().min(1).max(80).optional(),
   sourceDocuments: z.array(SourceDocumentSchema).max(20).default([]),
   customRecipes: z.array(DeckRecipeSchema).max(12).default([])
 });
+
+const METRIC_REQUIRED_RECIPE_IDS = new Set([
+  "client_adoption_report",
+  "executive_adoption_update",
+  "risk_remediation_plan",
+  "quarterly_business_review"
+]);
 
 export async function POST(request: Request) {
   try {
@@ -28,14 +46,38 @@ export async function POST(request: Request) {
     const csvRows = body.csvRows as AdoptionCsvRow[];
     const sourceDocuments = body.sourceDocuments as SourceDocument[];
     const customRecipes = body.customRecipes as DeckRecipe[];
-    const planningResult = await generateDeckPlanWithOptionalOpenAI(
+    const contextPack = buildContextPackFromInputs({
+      contextPack: body.contextPack,
+      csvRows,
+      sourceDocuments
+    });
+    const recipeSelection = selectDeckRecipe(
+      body.prompt,
+      body.recipeId,
+      customRecipes
+    );
+
+    if (
+      METRIC_REQUIRED_RECIPE_IDS.has(recipeSelection.recipe.recipe_id) &&
+      !contextPackHasAdoptionMetrics(contextPack)
+    ) {
+      return NextResponse.json(
+        {
+          error: `${recipeSelection.recipe.name} needs a client metrics snapshot with client name, reporting period, active users, licensed users, and adoption score. Add metrics or choose Product Update / Ad Hoc.`
+        },
+        { status: 422 }
+      );
+    }
+
+    const planningResult = await generateDeckPlanWithOpenAISubagents(
       body.prompt,
       csvRows,
       brandContract,
       {
         recipeId: body.recipeId,
         customRecipes,
-        sourceDocuments
+        sourceDocuments: contextPack.sourceDocuments,
+        contextPack
       }
     );
     const deckPlan = planningResult.deckPlan;
@@ -43,7 +85,12 @@ export async function POST(request: Request) {
     const accuracyAudit = auditDeckAccuracy({
       deckPlan,
       parsedCsvData: csvRows,
-      sourceDocuments
+      sourceDocuments: contextPack.sourceDocuments,
+      contextPack
+    });
+    const fitAudit = auditDeckFit({
+      deckPlan,
+      brandContract
     });
 
     return NextResponse.json({
@@ -51,9 +98,10 @@ export async function POST(request: Request) {
       deckPlan,
       validationReport,
       accuracyAudit,
+      fitAudit,
       planningMode: planningResult.planningMode,
       plannerModel: planningResult.plannerModel,
-      plannerFallbackReason: planningResult.fallbackReason
+      agentTrace: planningResult.agentTrace
     });
   } catch (error) {
     return NextResponse.json(

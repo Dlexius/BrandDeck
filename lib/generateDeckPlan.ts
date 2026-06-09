@@ -8,6 +8,17 @@ import {
   MAX_DECK_SLIDES,
   MAX_SOURCE_DOCUMENT_CHARS
 } from "@/lib/deck-plan-schema";
+import { chunkDeckPlanContent } from "@/lib/deck-content-chunker";
+import {
+  contextPackToMetricRows,
+  latestContextMetricRow,
+  metricDatumsByKey,
+  normalizedMetricKey,
+  numericMetricValue,
+  standardMetricKeys,
+  type ContextPack
+} from "@/lib/context-pack-schema";
+import { planDeckSections } from "@/lib/deck-section-planner";
 import {
   selectDeckRecipe,
   type DeckRecipe,
@@ -191,6 +202,7 @@ type GenerateDeckPlanOptions = {
   recipeId?: string;
   customRecipes?: DeckRecipe[];
   sourceDocuments?: SourceDocument[];
+  contextPack?: ContextPack;
 };
 
 type SourceEvidence = {
@@ -212,7 +224,145 @@ type ProductReleaseUpdate = {
   whatPoints: string[];
   whyPoints: string[];
   sourceRef: string;
+  relevanceScore?: number;
+  relevanceReasons?: string[];
 };
+
+const METRIC_REQUIRED_RECIPE_IDS = new Set([
+  "client_adoption_report",
+  "executive_adoption_update",
+  "risk_remediation_plan",
+  "quarterly_business_review"
+]);
+
+function recipeRequiresAccountMetrics(recipe: DeckRecipe) {
+  return METRIC_REQUIRED_RECIPE_IDS.has(recipe.recipe_id);
+}
+
+function rowsFromContextPack(contextPack?: ContextPack): AdoptionCsvRow[] {
+  return contextPackToMetricRows(contextPack) as AdoptionCsvRow[];
+}
+
+function hasUsableMetricRows(rows: AdoptionCsvRow[]) {
+  return rows.map(normalizeRow).some(hasMetricSignal);
+}
+
+function fallbackRowFromContextPack(
+  contextPack: ContextPack | undefined,
+  recipe: DeckRecipe
+): AdoptionCsvRow {
+  const latestRow = latestContextMetricRow(contextPack) as AdoptionCsvRow | undefined;
+  const clientName =
+    latestRow?.client_name ??
+    contextPack?.clientProfile?.name ??
+    "Selected Client";
+  const reportPeriod =
+    latestRow?.report_period ??
+    contextPack?.metricSnapshots[contextPack.metricSnapshots.length - 1]?.period ??
+    "Current Period";
+  const ownedTools = contextPack?.clientProfile?.ownedTools ?? [];
+  const topFeature = String(latestRow?.top_feature ?? ownedTools[0] ?? "Owned tools");
+  const lowestFeature = String(
+    latestRow?.lowest_feature ?? ownedTools[ownedTools.length - 1] ?? "Enablement"
+  );
+  const risk =
+    contextPack?.continuityMemory.openRisks[0] ??
+    contextPack?.clientProfile?.risks[0] ??
+    "Review rollout readiness against the selected context before the next meeting.";
+  const recommendation =
+    contextPack?.continuityMemory.priorRecommendations[0] ??
+    contextPack?.clientProfile?.businessGoals[0] ??
+    "Align the presentation to the selected client context and audience.";
+
+  return {
+    client_name: String(clientName),
+    report_period: String(reportPeriod),
+    active_users: 0,
+    licensed_users: 0,
+    adoption_score: 0,
+    projects_active: 0,
+    mobile_usage_rate: 0,
+    daily_logs_count: 0,
+    rfi_count: 0,
+    submittals_count: 0,
+    top_feature: compactText(topFeature, 80),
+    lowest_feature: compactText(lowestFeature, 80),
+    risk_summary:
+      recipe.recipe_id === "product_update_deck"
+        ? "Release relevance should be reviewed against owned tools, rollout stage, and source context."
+        : compactText(risk, 220),
+    recommendation_1: compactText(recommendation, 160),
+    recommendation_2: "Use selected source context to confirm priorities.",
+    recommendation_3: "Capture owner, timing, and next-step decisions."
+  };
+}
+
+function contextOwnedTools(contextPack?: ContextPack) {
+  return (contextPack?.clientProfile?.ownedTools ?? []).map((tool) =>
+    tool.toLowerCase()
+  );
+}
+
+function contextMetricFeatureRows(
+  contextPack: ContextPack | undefined,
+  productUpdates: ProductReleaseUpdate[],
+  current: NormalizedRow
+) {
+  const metricIndex = metricDatumsByKey(contextPack);
+  const standardKeys = standardMetricKeys();
+  const metricRows = Array.from(metricIndex.entries())
+    .filter(([key]) => !standardKeys.has(key))
+    .flatMap(([key, metrics]) => {
+      const metric = metrics[metrics.length - 1];
+      const value = metric ? numericMetricValue(metric) : Number.NaN;
+
+      if (!metric || !Number.isFinite(value)) {
+        return [];
+      }
+
+      return [
+        {
+          feature: compactText(metric.label ?? key.replace(/_/g, " "), 32),
+          count: Math.round(Math.max(0, value))
+        }
+      ];
+    });
+
+  if (metricRows.length > 0) {
+    return metricRows;
+  }
+
+  if (productUpdates.length > 0) {
+    return groupProductUpdatesBySolutionArea(productUpdates).map((group) => ({
+      feature: compactText(group.solutionArea, 32),
+      count: group.updates.length
+    }));
+  }
+
+  const ownedTools = contextPack?.clientProfile?.ownedTools ?? [];
+
+  if (ownedTools.length > 0) {
+    return ownedTools.map((tool) => ({
+      feature: compactText(tool, 32),
+      count: 1
+    }));
+  }
+
+  return [
+    {
+      feature: "Daily Logs",
+      count: current.daily_logs_count
+    },
+    {
+      feature: "RFIs",
+      count: current.rfi_count
+    },
+    {
+      feature: "Submittals",
+      count: current.submittals_count
+    }
+  ];
+}
 
 function recipeAudience(recipe: DeckRecipe, fallbackAudience: string) {
   return recipe.audience.startsWith("Prompt-selected")
@@ -717,7 +867,7 @@ function findPrioritizedEvidenceSentences(
 }
 
 function buildSourceEvidence(sourceDocuments: SourceDocument[] = []): SourceEvidence {
-  const boundedDocuments = sourceDocuments.slice(0, 6).map((document) => ({
+  const boundedDocuments = sourceDocuments.slice(0, 20).map((document) => ({
     ...document,
     text: document.text.slice(0, MAX_SOURCE_DOCUMENT_CHARS)
   }));
@@ -974,6 +1124,121 @@ function groupProductUpdatesBySolutionArea(updates: ProductReleaseUpdate[]) {
   return groups;
 }
 
+function tokenSet(value: string) {
+  return new Set(
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((token) => token.length >= 3)
+  );
+}
+
+function scoreProductUpdate({
+  update,
+  userPrompt,
+  contextPack,
+  current
+}: {
+  update: ProductReleaseUpdate;
+  userPrompt: string;
+  contextPack?: ContextPack;
+  current: NormalizedRow;
+}) {
+  let score = 0;
+  const reasons: string[] = [];
+  const ownedTools = contextOwnedTools(contextPack);
+  const haystack = `${update.solutionArea} ${update.tool} ${update.title} ${
+    update.whatPoints.join(" ")
+  } ${update.whyPoints.join(" ")}`.toLowerCase();
+
+  if (
+    ownedTools.some(
+      (tool) => haystack.includes(tool) || tool.includes(update.tool.toLowerCase())
+    )
+  ) {
+    score += 45;
+    reasons.push("Matches an owned client tool.");
+  }
+
+  const profileTerms = [
+    contextPack?.clientProfile?.segment,
+    contextPack?.clientProfile?.stage,
+    ...(contextPack?.clientProfile?.businessGoals ?? []),
+    ...(contextPack?.clientProfile?.risks ?? [])
+  ]
+    .filter((term): term is string => Boolean(term))
+    .join(" ");
+  const profileTokens = tokenSet(profileTerms);
+  const matchedProfileTokens = Array.from(profileTokens).filter((token) =>
+    haystack.includes(token)
+  );
+
+  if (matchedProfileTokens.length > 0) {
+    score += Math.min(25, matchedProfileTokens.length * 5);
+    reasons.push("Matches client segment, stage, goals, or risks.");
+  }
+
+  const adoptionGap = `${current.lowest_feature} ${current.top_feature}`.toLowerCase();
+
+  if (adoptionGap && haystack.includes(adoptionGap.split(/\s+/)[0] ?? "")) {
+    score += 15;
+    reasons.push("Connects to current workflow signals.");
+  }
+
+  const promptTokens = tokenSet(userPrompt);
+  const matchedPromptTokens = Array.from(promptTokens).filter((token) =>
+    haystack.includes(token)
+  );
+
+  if (matchedPromptTokens.length > 0) {
+    score += Math.min(15, matchedPromptTokens.length * 3);
+    reasons.push("Matches prompt priorities.");
+  }
+
+  if (/ga|general availability/i.test(update.launchType)) {
+    score += 4;
+  }
+
+  if (/beta|preview/i.test(update.launchType)) {
+    score += 2;
+  }
+
+  return {
+    ...update,
+    relevanceScore: score,
+    relevanceReasons:
+      reasons.length > 0 ? reasons : ["Included from selected product context."]
+  };
+}
+
+function rankProductUpdates({
+  updates,
+  userPrompt,
+  contextPack,
+  current
+}: {
+  updates: ProductReleaseUpdate[];
+  userPrompt: string;
+  contextPack?: ContextPack;
+  current: NormalizedRow;
+}) {
+  return updates
+    .map((update) =>
+      scoreProductUpdate({
+        update,
+        userPrompt,
+        contextPack,
+        current
+      })
+    )
+    .sort(
+      (a, b) =>
+        (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0) ||
+        a.solutionArea.localeCompare(b.solutionArea)
+    );
+}
+
 function parseMeetingLengthMinutes(prompt: string) {
   const hourMatch = prompt.match(/\b(\d{1,2})\s*(hour|hr)s?\b/i);
 
@@ -1200,18 +1465,40 @@ export function generateDeckPlan(
   brandContract: BrandContract,
   options: GenerateDeckPlanOptions = {}
 ): DeckPlan {
-  if (parsedCsvData.length === 0) {
-    throw new Error("At least one account metric row is required to generate a deck.");
+  const recipeSelection = selectDeckRecipe(
+    userPrompt,
+    options.recipeId,
+    options.customRecipes
+  );
+  const recipe = recipeSelection.recipe;
+  const contextRows = rowsFromContextPack(options.contextPack);
+  const sourceRows = parsedCsvData.length > 0 ? parsedCsvData : contextRows;
+  const hasAccountMetrics = hasUsableMetricRows(sourceRows);
+
+  if (sourceRows.length === 0 && recipeRequiresAccountMetrics(recipe)) {
+    throw new Error(
+      `${recipe.name} needs client, period, active user, licensed user, and adoption score metrics. Add a metrics snapshot or choose a source-only deck type.`
+    );
   }
 
-  const inputRows = parsedCsvData.map(normalizeRow);
+  if (!hasAccountMetrics && recipeRequiresAccountMetrics(recipe)) {
+    throw new Error(
+      `${recipe.name} needs adoption/account metrics before BrandDeck can generate the deck. Add a metrics snapshot with client name, period, active users, licensed users, and adoption score.`
+    );
+  }
+
+  const rowsForPlanning =
+    sourceRows.length > 0
+      ? sourceRows
+      : [fallbackRowFromContextPack(options.contextPack, recipe)];
+  const inputRows = rowsForPlanning.map(normalizeRow);
   const latestInputRow = inputRows[inputRows.length - 1];
   const rowsWithMetricSignal = inputRows.filter(hasMetricSignal);
   const rows = rowsWithMetricSignal.length > 0 ? rowsWithMetricSignal : inputRows;
   const first = rows[0];
   const current = rows[rows.length - 1];
   const prior = rows.length > 1 ? rows[rows.length - 2] : rows[0];
-  const usingFallbackMetrics = latestInputRow !== current;
+  const usingFallbackMetrics = latestInputRow !== current || !hasAccountMetrics;
   const metricsNeedConfirmation =
     usingFallbackMetrics ||
     (current.licensed_users === 0 && current.active_users > 0);
@@ -1222,12 +1509,6 @@ export function generateDeckPlan(
   );
   const adoptionDelta = current.adoption_score - prior.adoption_score;
   const mobileDelta = current.mobile_usage_rate - prior.mobile_usage_rate;
-  const recipeSelection = selectDeckRecipe(
-    userPrompt,
-    options.recipeId,
-    options.customRecipes
-  );
-  const recipe = recipeSelection.recipe;
   const sourceRefsForRecipe = [
     `Recipe: ${recipe.name}`,
     `Recipe mode: ${recipe.mode}`,
@@ -1236,14 +1517,20 @@ export function generateDeckPlan(
   const sourceEvidence = buildSourceEvidence(options.sourceDocuments);
   const sourceDocRefs = sourceEvidence.refs;
   const sourceCharacters = sourcePackCharacterCount(options.sourceDocuments);
-  const productUpdates = extractProductReleaseUpdates(options.sourceDocuments);
-  const slideBudget = targetDeckSlideCount({
-    recipe,
+  const extractedProductUpdates = extractProductReleaseUpdates(options.sourceDocuments);
+  const productUpdates = rankProductUpdates({
+    updates: extractedProductUpdates,
     userPrompt,
-    sourceEvidence,
-    sourceCharacters,
-    productUpdates
+    contextPack: options.contextPack,
+    current
   });
+  const sectionPlan = planDeckSections({
+    recipe,
+    prompt: userPrompt,
+    contextPack: options.contextPack,
+    productUpdateCount: productUpdates.length
+  });
+  const slideBudget = sectionPlan.targetSlideCount;
   const chromeLabel = deckChromeLabel(recipe);
   const safeSourceActions = safeSourceRecommendations(sourceEvidence);
   const planClientName = compactText(current.client_name || first.client_name, 80);
@@ -1259,13 +1546,12 @@ export function generateDeckPlan(
     return uniqueClientLines([
       ...safeSourceActions,
       ...actionStepsForRecipe(recipe, current)
-    ]).slice(0, 3);
+    ]);
   }
 
   function productUpdateAgendaItems() {
     const solutionAreas = groupProductUpdatesBySolutionArea(productUpdates)
-      .map((group) => group.solutionArea)
-      .slice(0, 3);
+      .map((group) => group.solutionArea);
 
     return uniqueClientLines([
       "Audience relevance",
@@ -1273,9 +1559,7 @@ export function generateDeckPlan(
       ...solutionAreas.map((area) => `${area} updates`),
       "Rollout risks",
       "Client-specific next steps"
-    ])
-      .map((item) => compactText(item, 68))
-      .slice(0, 6);
+    ]).map((item) => compactText(item, 68));
   }
 
   function sourceTrendFollowUps() {
@@ -1332,7 +1616,7 @@ export function generateDeckPlan(
               .join(" "),
             190
           ),
-          recommendations: additionalActions.slice(0, 3)
+          recommendations: additionalActions
         },
         source_refs: appendEvidence(
           ["Source context: additional action evidence", ...sourceRefsForRecipe],
@@ -1360,7 +1644,7 @@ export function generateDeckPlan(
       title: followUpExpansionTitle,
       fields: {
         deck_label: chromeLabel,
-        steps: followUpSteps.slice(0, 3),
+        steps: followUpSteps,
         note: compactText(
           "Added when source context supports a deeper deck.",
           160
@@ -1503,38 +1787,39 @@ export function generateDeckPlan(
           ], sourceDocRefs)
         };
       case "feature_adoption":
-        return {
-        layout_id: "feature_adoption",
-        title: clientFacingSlideTitle(recipe, recipeSlide),
-        fields: {
-            deck_label: chromeLabel,
-          chart_type: "bar",
-          feature_metrics: [
-            {
-              feature: "Daily Logs",
-              count: current.daily_logs_count
-            },
-            {
-              feature: "RFIs",
-              count: current.rfi_count
-            },
-            {
-              feature: "Submittals",
-              count: current.submittals_count
-            }
-          ],
-          top_feature: current.top_feature,
-          lowest_feature: current.lowest_feature
-        },
-        source_refs: [
-          "Account metric: daily_logs_count",
-          "Account metric: rfi_count",
-          "Account metric: submittals_count",
-          "Account metric: top_feature",
-            "Account metric: lowest_feature",
-            ...sourceRefsForRecipe
-        ]
-        };
+        {
+          const featureMetrics = contextMetricFeatureRows(
+            options.contextPack,
+            productUpdates,
+            current
+          );
+
+          return {
+          layout_id: "feature_adoption",
+          title: clientFacingSlideTitle(recipe, recipeSlide),
+          fields: {
+              deck_label: chromeLabel,
+            chart_type: "bar",
+            feature_metrics: featureMetrics,
+            top_feature: compactText(
+              current.top_feature || featureMetrics[0]?.feature || "Top workflow",
+              48
+            ),
+            lowest_feature: compactText(
+              current.lowest_feature ||
+                featureMetrics[featureMetrics.length - 1]?.feature ||
+                "Focus workflow",
+              48
+            )
+          },
+          source_refs: [
+            "Context metrics: feature signals",
+            "Account metric: top_feature",
+              "Account metric: lowest_feature",
+              ...sourceRefsForRecipe
+          ]
+          };
+        }
       case "risks_recommendations":
         return {
         layout_id: "risks_recommendations",
@@ -1706,7 +1991,7 @@ export function generateDeckPlan(
   function productUpdateOverviewSlide(
     selectedUpdates: ProductReleaseUpdate[]
   ): DeckSlide {
-    const groups = groupProductUpdatesBySolutionArea(selectedUpdates).slice(0, 3);
+    const groups = groupProductUpdatesBySolutionArea(selectedUpdates);
     const featureMetrics =
       groups.length > 0
         ? groups.map((group) => ({
@@ -1743,7 +2028,7 @@ export function generateDeckPlan(
       "agenda",
       "executive_summary",
       "feature_adoption",
-      "kpi_scorecard"
+      ...(hasAccountMetrics ? ["kpi_scorecard"] : [])
     ];
     const closingRoles = [
       "risks_recommendations",
@@ -1767,7 +2052,7 @@ export function generateDeckPlan(
       const fallbackMiddle = [
         productUpdateFocusSlide(),
         productUpdateOverviewSlide([]),
-        ...(recipeSlideForRole("usage_trend")
+        ...(hasAccountMetrics && recipeSlideForRole("usage_trend")
           ? [buildSlide(recipeSlideForRole("usage_trend") as DeckRecipeSlide)]
           : [])
       ].slice(0, availableMiddleSlots);
@@ -1818,12 +2103,19 @@ export function generateDeckPlan(
     return slides.slice(0, slideBudget);
   }
 
+  const metricOnlyRoles = new Set(["kpi_scorecard", "usage_trend"]);
+  const recipeSlidesForPlanning =
+    hasAccountMetrics || recipeRequiresAccountMetrics(recipe)
+      ? recipe.slide_sequence
+      : recipe.slide_sequence.filter(
+          (recipeSlide) => !metricOnlyRoles.has(recipeSlide.slide_role)
+        );
   const baseSlides =
     recipe.recipe_id === "product_update_deck"
       ? buildProductUpdateDeckSlides()
-      : recipe.slide_sequence.map(buildSlide);
-  const appendixIndex = recipe.slide_sequence.findIndex(
-    (slide) => slide.slide_role === "appendix_source_notes"
+      : recipeSlidesForPlanning.map(buildSlide);
+  const appendixIndex = baseSlides.findIndex((slide) =>
+    /source notes/i.test(slide.title)
   );
   const expansionSlides = buildContextExpansionSlides(
     Math.max(0, slideBudget - baseSlides.length)
@@ -1836,6 +2128,22 @@ export function generateDeckPlan(
           ...baseSlides.slice(appendixIndex)
         ]
       : [...baseSlides, ...expansionSlides];
+  const visibleProductTitles = new Set(
+    slides.map((slide) => slide.title.toLowerCase())
+  );
+  const omittedProductUpdates = productUpdates.filter(
+    (update) => !visibleProductTitles.has(update.title.toLowerCase())
+  );
+  const omittedEvidence = [
+    ...omittedProductUpdates.map((update, index) => ({
+      id: `product-update-omitted-${index + 1}`,
+      reason:
+        "Lower relevance to the selected client context or outside the adaptive slide budget.",
+      content_type: "product_update",
+      item_count: 1,
+      source_ref: update.sourceRef
+    }))
+  ];
 
   const deckPlan: DeckPlan = {
     deck_type: recipe.recipe_id,
@@ -1849,10 +2157,11 @@ export function generateDeckPlan(
     source_pack: sourceEvidence.summary.document_count > 0
       ? sourceEvidence.summary
       : undefined,
+    omitted_evidence: omittedEvidence.length > 0 ? omittedEvidence : undefined,
     slides
   };
 
-  return DeckPlanSchema.parse(deckPlan);
+  return DeckPlanSchema.parse(chunkDeckPlanContent(deckPlan));
 }
 
 export function createStructuredOutputsPlaceholder() {

@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { getActiveBrandContract } from "@/lib/brand-contract-store";
-import { renderCloneEditedPptx } from "@/lib/cloneStarterPptx";
+import {
+  auditCloneEditBindings,
+  renderCloneEditedPptx
+} from "@/lib/cloneStarterPptx";
+import { auditDeckFit } from "@/lib/auditDeckFit";
 import { DeckPlanSchema } from "@/lib/deck-plan-schema";
 import { auditPptxPackage } from "@/lib/pptx-package-audit";
 import { buildTemplateEditGovernance } from "@/lib/template-edit-manifest";
@@ -50,11 +54,39 @@ export async function POST(request: Request) {
       );
     }
 
+    const fitAudit = auditDeckFit({ deckPlan, brandContract });
+
+    if (!fitAudit.passed) {
+      return NextResponse.json(
+        {
+          error: "Deck plan failed layout fit audit.",
+          fitAudit
+        },
+        { status: 422 }
+      );
+    }
+
     const frameMapArtifact = buildTemplateFrameMapArtifact(templateKit, deckPlan);
     const editGovernance = buildTemplateEditGovernance(
       templateKit,
       frameMapArtifact
     );
+    const bindingAudit = auditCloneEditBindings({
+      templateKit,
+      frameMapArtifact,
+      deckPlan,
+      allowLocalFallback: body.allowLocalBindingFallback === true
+    });
+
+    if (!bindingAudit.passed) {
+      return NextResponse.json(
+        {
+          error: "Template export failed object binding governance.",
+          bindingAudit
+        },
+        { status: 422 }
+      );
+    }
     const pptxBuffer = await renderCloneEditedPptx(
       templateKit,
       frameMapArtifact,

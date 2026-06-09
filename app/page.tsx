@@ -40,6 +40,8 @@ import type {
 } from "@/lib/deck-plan-schema";
 import { MAX_SOURCE_DOCUMENT_CHARS } from "@/lib/deck-plan-schema";
 import type { DeckAccuracyAudit } from "@/lib/auditDeckAccuracy";
+import type { DeckFitAudit } from "@/lib/auditDeckFit";
+import { buildContextPackFromInputs } from "@/lib/context-pack-schema";
 import { approvedDeckRecipes } from "@/lib/deck-recipes";
 import type { ValidationReport } from "@/lib/validateDeckPlan";
 import { validateDeckPlan } from "@/lib/validateDeckPlan";
@@ -538,12 +540,14 @@ type GeneratePlanApiResponse = {
   deckPlan?: DeckPlan;
   validationReport?: ValidationReport;
   accuracyAudit?: DeckAccuracyAudit;
-  planningMode?:
-    | "deterministic"
-    | "openai_structured_outputs"
-    | "openai_fallback_deterministic";
+  fitAudit?: DeckFitAudit;
+  planningMode?: "openai_subagent_orchestration";
   plannerModel?: string;
-  plannerFallbackReason?: string;
+  agentTrace?: Array<{
+    agentId: string;
+    model: string;
+    status: "passed";
+  }>;
   error?: string;
 };
 
@@ -653,6 +657,23 @@ function createSourceDocument(
     text: normalizedText,
     characters: normalizedText.length
   };
+}
+
+function mergeSourceDocuments(
+  current: SourceDocumentSummary[],
+  incoming: SourceDocumentSummary[]
+) {
+  const merged = new Map<string, SourceDocumentSummary>();
+
+  for (const document of [...current, ...incoming]) {
+    const key = document.id || `${document.name}:${document.type}`;
+
+    if (!merged.has(key)) {
+      merged.set(key, document);
+    }
+  }
+
+  return Array.from(merged.values()).slice(0, 20);
 }
 
 function slugifyRecipeId(value: string) {
@@ -874,6 +895,7 @@ function CreatorWorkflowProgress({
 function ExportQualityPanel({
   report,
   accuracyAudit,
+  fitAudit,
   brandPreflight,
   templateGovernance,
   usingTemplateCloneEdit,
@@ -882,6 +904,7 @@ function ExportQualityPanel({
 }: {
   report: ValidationReport | null;
   accuracyAudit: DeckAccuracyAudit | null;
+  fitAudit: DeckFitAudit | null;
   brandPreflight: BrandPreflightReport | null;
   templateGovernance: TemplateGovernanceReport | null;
   usingTemplateCloneEdit: boolean;
@@ -890,6 +913,7 @@ function ExportQualityPanel({
 }) {
   const planReady = Boolean(report?.passed);
   const accuracyReady = Boolean(accuracyAudit?.passed);
+  const fitReady = Boolean(fitAudit?.passed);
   const preflightReady = usingTemplateCloneEdit
     ? brandPreflight?.status === "ready"
     : planReady;
@@ -913,6 +937,11 @@ function ExportQualityPanel({
       detail: accuracyAudit
         ? `${accuracyAudit.accuracyScore}% data and source grounding`
         : "Generate a deck"
+    },
+    {
+      label: "Layout fit",
+      passed: fitReady,
+      detail: fitAudit ? `${fitAudit.fitScore}% fit score` : "Generate a deck"
     },
     {
       label: "Brand checks",
@@ -947,12 +976,14 @@ function ExportQualityPanel({
     : !planReady
       ? "Generate Presentation"
       : !accuracyReady
-        ? "Regenerate With Current Context"
-        : !preflightReady
-          ? "Review Brand Settings"
-          : !objectMapReady
-            ? "Review Template Map"
-            : "Generate Presentation";
+        ? "Review Sources or Generate Again"
+        : !fitReady
+          ? "Shorten Copy or Generate Again"
+          : !preflightReady
+            ? "Review Brand Settings"
+            : !objectMapReady
+              ? "Review Template Map"
+              : "Generate Presentation";
 
   return (
     <Card>
@@ -1003,6 +1034,7 @@ function ExportQualityPanel({
 function ValidationPanel({
   report,
   accuracyAudit,
+  fitAudit,
   brandPreflight,
   templateGovernance,
   canExport,
@@ -1016,6 +1048,7 @@ function ValidationPanel({
 }: {
   report: ValidationReport | null;
   accuracyAudit: DeckAccuracyAudit | null;
+  fitAudit: DeckFitAudit | null;
   brandPreflight: BrandPreflightReport | null;
   templateGovernance: TemplateGovernanceReport | null;
   canExport: boolean;
@@ -1044,6 +1077,7 @@ function ValidationPanel({
         <ExportQualityPanel
           report={report}
           accuracyAudit={accuracyAudit}
+          fitAudit={fitAudit}
           brandPreflight={brandPreflight}
           templateGovernance={templateGovernance}
           usingTemplateCloneEdit={usingTemplateCloneEdit}
@@ -2839,7 +2873,7 @@ function BrandColorSettingsPanel({
           </h2>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-[#787E89]">
             Admin-managed tokens used by the app theme, validation, manifests,
-            and deterministic renderer.
+            and governed renderer.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -4454,7 +4488,7 @@ function ConnectedContextPanel({
                 </div>
               </div>
               <span className="mt-3 inline-flex rounded-sm bg-[#F3F3F3] px-2 py-1 text-[9px] font-black uppercase tracking-[0.08em] text-brand-ink">
-                Next
+                Coming Soon
               </span>
             </div>
           ))}
@@ -4476,14 +4510,6 @@ function ConnectedContextPanel({
           onImportGoogleDriveFiles={onImportGoogleDriveFiles}
         />
 
-        <div className="flex items-start gap-2 rounded-md bg-white px-3 py-2 text-xs font-semibold leading-5 text-[#787E89] ring-1 ring-[#EFEAE5]">
-          <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-orange" />
-          <span>
-            Connected sources can shape claims, recommendations, and source
-            references. The active brand contract still controls layouts,
-            colors, typography, and asset placement.
-          </span>
-        </div>
       </CardContent>
     </Card>
   );
@@ -4645,6 +4671,7 @@ export default function Home() {
     useState<ValidationReport | null>(null);
   const [accuracyAudit, setAccuracyAudit] =
     useState<DeckAccuracyAudit | null>(null);
+  const [fitAudit, setFitAudit] = useState<DeckFitAudit | null>(null);
   const [exportCertificate, setExportCertificate] =
     useState<ExportCertificate | null>(null);
   const [templateFileName, setTemplateFileName] = useState(
@@ -4700,6 +4727,10 @@ export default function Home() {
   const [resettingBrandColors, setResettingBrandColors] = useState(false);
 
   const currentRow = csvRows[csvRows.length - 1];
+  const selectedClientProfile = useMemo(
+    () => CLIENT_PROFILES.find((profile) => profile.id === selectedClientProfileId),
+    [selectedClientProfileId]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -4809,6 +4840,7 @@ export default function Home() {
     deckPlan &&
       validationReport?.passed &&
       accuracyAudit?.passed &&
+      fitAudit?.passed &&
       (!templateKit ||
         (brandPreflight?.status === "ready" && hasFreshExportCertificate))
   );
@@ -4830,9 +4862,15 @@ export default function Home() {
     };
   }, [currentRow]);
   const promptReady = prompt.trim().length > 0;
-  const dataReady = csvRows.length > 0;
+  const dataReady = Boolean(
+    csvRows.length > 0 ||
+      selectedClientProfile ||
+      clientProfileContext.trim() ||
+      sourceDocuments.length > 0 ||
+      sourceNotes.trim()
+  );
   const deckReady = Boolean(
-    deckPlan && validationReport?.passed && accuracyAudit?.passed
+    deckPlan && validationReport?.passed && accuracyAudit?.passed && fitAudit?.passed
   );
   const sourceContextCount =
     sourceDocuments.length +
@@ -4843,6 +4881,7 @@ export default function Home() {
     setDeckPlan(null);
     setValidationReport(null);
     setAccuracyAudit(null);
+    setFitAudit(null);
     setExportCertificate(null);
   }
 
@@ -4906,7 +4945,7 @@ export default function Home() {
     setSelectedGoogleDriveFileIds((current) =>
       current.includes(fileId)
         ? current.filter((id) => id !== fileId)
-        : [...current, fileId].slice(0, 6)
+        : [...current, fileId].slice(0, 20)
     );
   }
 
@@ -4976,13 +5015,20 @@ export default function Home() {
         throw new Error("Selected Google Drive files did not include readable text.");
       }
 
-      setSourceDocuments((current) => [...current, ...documents].slice(0, 6));
+      const nextDocuments = mergeSourceDocuments(sourceDocuments, documents);
+      const addedCount = Math.max(0, nextDocuments.length - sourceDocuments.length);
+
+      setSourceDocuments(nextDocuments);
       setActiveGoogleSourceType(null);
       setSelectedGoogleDriveFileIds([]);
       setNotice(
-        `${documents.length} Google Drive source${
-          documents.length === 1 ? "" : "s"
-        } attached for planner evidence.`
+        `${nextDocuments.length} connected source${
+          nextDocuments.length === 1 ? "" : "s"
+        } loaded for planner evidence${
+          addedCount > 0
+            ? ` (${addedCount} added from Google Drive).`
+            : "."
+        }`
       );
     } catch (error) {
       setNotice(
@@ -5257,6 +5303,7 @@ export default function Home() {
       setDeckPlan(null);
       setValidationReport(null);
       setAccuracyAudit(null);
+      setFitAudit(null);
       setExportCertificate(null);
       setNotice(
         recipe
@@ -5298,7 +5345,7 @@ export default function Home() {
         throw new Error("Uploaded source files did not include readable text.");
       }
 
-      setSourceDocuments((current) => [...current, ...validDocuments].slice(0, 6));
+      setSourceDocuments((current) => [...current, ...validDocuments].slice(0, 20));
       setNotice(
         `${validDocuments.length} source document${
           validDocuments.length === 1 ? "" : "s"
@@ -5685,14 +5732,43 @@ export default function Home() {
 
   async function buildValidatedDeckPlan() {
     const rows = csvRows;
-
-    if (rows.length === 0) {
-      throw new Error(
-        "Add the required account snapshot fields before generating."
-      );
-    }
-
     const sourcePack = buildSourcePack();
+    const contextPack = buildContextPackFromInputs({
+      clientProfile: selectedClientProfile
+        ? {
+            id: selectedClientProfile.id,
+            name: selectedClientProfile.name,
+            segment: selectedClientProfile.segment,
+            stage: selectedClientProfile.stage,
+            ownedTools: selectedClientProfile.tools,
+            businessGoals: [selectedClientProfile.focus],
+            risks: businessSnapshot.risk_summary
+              ? [businessSnapshot.risk_summary]
+              : [],
+            stakeholders: []
+          }
+        : businessSnapshot.client_name
+          ? {
+              id: businessSnapshot.client_name
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, "_")
+                .replace(/^_+|_+$/g, ""),
+              name: businessSnapshot.client_name,
+              ownedTools: [
+                businessSnapshot.top_feature,
+                businessSnapshot.lowest_feature
+              ].filter(Boolean),
+              businessGoals: [],
+              risks: businessSnapshot.risk_summary
+                ? [businessSnapshot.risk_summary]
+                : [],
+              stakeholders: []
+            }
+          : undefined,
+      csvRows: rows,
+      manualSnapshot: businessSnapshot,
+      sourceDocuments: sourcePack
+    });
     const response = await fetch("/api/generate-plan", {
       method: "POST",
       headers: {
@@ -5701,6 +5777,7 @@ export default function Home() {
       body: JSON.stringify({
         prompt,
         csvRows: rows,
+        contextPack,
         recipeId: selectedRecipeId === "auto" ? undefined : selectedRecipeId,
         customRecipes,
         sourceDocuments: sourcePack
@@ -5712,7 +5789,8 @@ export default function Home() {
       !response.ok ||
       !result.deckPlan ||
       !result.validationReport ||
-      !result.accuracyAudit
+      !result.accuracyAudit ||
+      !result.fitAudit
     ) {
       throw new Error(result.error ?? "Unable to generate a governed deck.");
     }
@@ -5720,11 +5798,13 @@ export default function Home() {
     const plan = result.deckPlan;
     const report = result.validationReport;
     const accuracy = result.accuracyAudit;
-    const planningMode = result.planningMode ?? "deterministic";
+    const fit = result.fitAudit;
+    const planningMode = result.planningMode ?? "openai_subagent_orchestration";
 
     setDeckPlan(plan);
     setValidationReport(report);
     setAccuracyAudit(accuracy);
+    setFitAudit(fit);
     setExportCertificate(null);
 
     if (templateKit) {
@@ -5737,9 +5817,10 @@ export default function Home() {
       plan,
       report,
       accuracy,
+      fit,
       planningMode,
       plannerModel: result.plannerModel,
-      plannerFallbackReason: result.plannerFallbackReason,
+      agentTrace: result.agentTrace,
       sourcePack,
       preflight
     };
@@ -5806,34 +5887,39 @@ export default function Home() {
     plan,
     report,
     accuracy,
+    fit,
     planningMode,
     plannerModel,
-    plannerFallbackReason,
+    agentTrace,
     sourcePack,
     preflight
   }: {
     plan: DeckPlan;
     report: ValidationReport;
     accuracy: DeckAccuracyAudit;
+    fit: DeckFitAudit;
     planningMode: NonNullable<GeneratePlanApiResponse["planningMode"]>;
     plannerModel?: string;
-    plannerFallbackReason?: string;
+    agentTrace?: GeneratePlanApiResponse["agentTrace"];
     sourcePack: SourceDocument[];
     preflight: BrandPreflightReport;
   }) {
+    const agentCount = agentTrace?.length ?? 0;
     const plannerPrefix =
-      planningMode === "openai_structured_outputs"
-        ? `AI-assisted planner${plannerModel ? ` (${plannerModel})` : ""}: `
-        : planningMode === "openai_fallback_deterministic"
-          ? `Deterministic fallback${plannerFallbackReason ? " after AI guardrail review" : ""}: `
-          : "Deterministic planner: ";
+      planningMode === "openai_subagent_orchestration"
+        ? `AI agent orchestration${agentCount > 0 ? ` (${agentCount} agents)` : ""}: `
+        : `AI planner${plannerModel ? ` (${plannerModel})` : ""}: `;
 
     if (!report.passed) {
       return `${plannerPrefix}Deck generated, but brand validation needs admin review before export.`;
     }
 
     if (!accuracy.passed) {
-      return `${plannerPrefix}Deck generated, but content grounding needs review before export.`;
+      return `${plannerPrefix}Deck generated, but source grounding needs review before export. Add stronger source context, adjust the prompt, or generate again.`;
+    }
+
+    if (!fit.passed) {
+      return `${plannerPrefix}Deck generated, but slide copy needs to be shorter before export.`;
     }
 
     if (!templateKit) {
@@ -5884,6 +5970,7 @@ export default function Home() {
       setDeckPlan(null);
       setValidationReport(null);
       setAccuracyAudit(null);
+      setFitAudit(null);
       setExportCertificate(null);
       setNotice(error instanceof Error ? error.message : "Unable to generate deck.");
     } finally {
@@ -6715,12 +6802,16 @@ export default function Home() {
                               Client
                             </p>
                             <p className="mt-1 text-sm font-black text-brand-charcoal">
-                              {kpiSummary?.client ?? "No client loaded"}
+                              {kpiSummary?.client ??
+                                selectedClientProfile?.name ??
+                                "Context selected"}
                             </p>
                             <p className="mt-1 text-xs font-semibold text-[#787E89]">
                               {kpiSummary
                                 ? `${kpiSummary.period} | ${kpiSummary.adoptionScore}% adoption`
-                                : "Add business data before generating"}
+                                : selectedClientProfile
+                                  ? `${selectedClientProfile.segment} | ${selectedClientProfile.stage}`
+                                  : "Source and prompt context ready"}
                             </p>
                           </div>
                           <div className="border-l-2 border-brand-orange bg-white px-4 py-3 ring-1 ring-[#EFEAE5]">
@@ -6804,6 +6895,7 @@ export default function Home() {
           <ValidationPanel
             report={validationReport}
             accuracyAudit={accuracyAudit}
+            fitAudit={fitAudit}
             brandPreflight={brandPreflight}
             templateGovernance={templateGovernance}
             canExport={canExport}

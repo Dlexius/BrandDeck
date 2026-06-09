@@ -5,6 +5,12 @@ import Papa from "papaparse";
 import { describe, expect, it } from "vitest";
 import brandContractData from "@/data/brand-contract.json";
 import { auditDeckAccuracy } from "@/lib/auditDeckAccuracy";
+import { auditDeckFit } from "@/lib/auditDeckFit";
+import { chunkDeckPlanContent } from "@/lib/deck-content-chunker";
+import {
+  buildContextPackFromInputs,
+  contextPackHasAdoptionMetrics
+} from "@/lib/context-pack-schema";
 import type {
   BrandContract,
   DeckPlan,
@@ -15,6 +21,7 @@ import { generateDeckPlan, type AdoptionCsvRow } from "@/lib/generateDeckPlan";
 import { auditPptxPackage } from "@/lib/pptx-package-audit";
 import { renderPptx } from "@/lib/renderPptx";
 import { validateDeckPlan } from "@/lib/validateDeckPlan";
+import { parseBusinessMetricRows } from "@/lib/metric-snapshot-adapter";
 
 const brandContract = brandContractData as unknown as BrandContract;
 const qualityPrompt =
@@ -70,6 +77,25 @@ function expectValidAndAccurate(
 
   expect(validation.passed, validation.checks.filter((check) => !check.passed).map((check) => check.detail).join("\n")).toBe(true);
   expect(accuracy.passed, accuracy.checks.filter((check) => !check.passed).map((check) => check.detail).join("\n")).toBe(true);
+}
+
+function expectValidAccurateAndFit(
+  deckPlan: DeckPlan,
+  sourceDocuments: SourceDocument[] = [],
+  contextPack?: ReturnType<typeof buildContextPackFromInputs>
+) {
+  const validation = validateDeckPlan(deckPlan, brandContract);
+  const accuracy = auditDeckAccuracy({
+    deckPlan,
+    parsedCsvData: contextPack ? [] : loadFixtureRows(),
+    sourceDocuments,
+    contextPack
+  });
+  const fit = auditDeckFit({ deckPlan, brandContract });
+
+  expect(validation.passed, validation.checks.filter((check) => !check.passed).map((check) => check.detail).join("\n")).toBe(true);
+  expect(accuracy.passed, accuracy.checks.filter((check) => !check.passed).map((check) => check.detail).join("\n")).toBe(true);
+  expect(fit.passed, fit.checks.filter((check) => !check.passed).map((check) => check.detail).join("\n")).toBe(true);
 }
 
 describe("export quality gates", () => {
@@ -143,7 +169,171 @@ describe("export quality gates", () => {
     expectValidAndAccurate(deckPlan, sourceDocuments);
   });
 
-  it("renders a fallback PPTX with embedded brand media and a clean package audit", async () => {
+  it("builds a context pack from profile, metrics, and source documents", () => {
+    const sourceDocuments = [
+      {
+        id: "source-notes",
+        name: "Client Notes",
+        type: "notes" as const,
+        text: "Risk: Budget owners need clearer enablement. Action: run a targeted product review."
+      }
+    ];
+    const contextPack = buildContextPackFromInputs({
+      clientProfile: {
+        id: "summit",
+        name: "Summit Ridge Constructors",
+        segment: "Commercial GC",
+        stage: "Renewal planning",
+        ownedTools: ["Budget", "Commitments", "Analytics"],
+        businessGoals: ["Improve project-controls visibility"],
+        risks: ["Budget workflows lag behind field adoption."],
+        stakeholders: ["Executive sponsor"]
+      },
+      csvRows: loadFixtureRows(),
+      sourceDocuments
+    });
+
+    expect(contextPack.clientProfile?.ownedTools).toContain("Budget");
+    expect(contextPack.metricSnapshots.length).toBeGreaterThan(0);
+    expect(contextPack.sourceDocuments).toHaveLength(1);
+    expect(contextPackHasAdoptionMetrics(contextPack)).toBe(true);
+  });
+
+  it("generates source-only product update decks without fake adoption metrics", () => {
+    const sourceDocuments = [
+      {
+        id: "may-product-updates",
+        name: "May 2026 Product Updates",
+        type: "presentation" as const,
+        text: productUpdateSource
+      }
+    ];
+    const contextPack = buildContextPackFromInputs({
+      clientProfile: {
+        id: "summit",
+        name: "Summit Ridge Constructors",
+        segment: "Commercial general contractor",
+        stage: "Renewal planning",
+        ownedTools: ["Budget", "Commitments", "Analytics"],
+        businessGoals: ["Tie product updates to project-controls outcomes."],
+        risks: ["Budget workflows need clearer rollout owners."],
+        stakeholders: []
+      },
+      sourceDocuments
+    });
+    const deckPlan = generateDeckPlan(
+      "Create a 60-minute product update release review for this client. Prioritize Budget, Commitments, and Analytics updates.",
+      [],
+      brandContract,
+      {
+        recipeId: "product_update_deck",
+        sourceDocuments,
+        contextPack
+      }
+    );
+    const budgetSlideIndex = deckPlan.slides.findIndex((slide) =>
+      /budget/i.test(slide.title)
+    );
+    const dailyLogSlideIndex = deckPlan.slides.findIndex((slide) =>
+      /daily log/i.test(slide.title)
+    );
+
+    expect(deckPlan.slides.length).toBeGreaterThan(10);
+    expect(deckPlan.slides.some((slide) => slide.layout_id === "adoption_kpi_scorecard")).toBe(false);
+    expect(budgetSlideIndex).toBeGreaterThanOrEqual(0);
+    expect(dailyLogSlideIndex === -1 || budgetSlideIndex < dailyLogSlideIndex).toBe(true);
+    expectValidAccurateAndFit(deckPlan, sourceDocuments, contextPack);
+  });
+
+  it("generates source-only ad hoc briefs without requiring CSV rows", () => {
+    const sourceDocuments = [
+      {
+        id: "meeting-brief",
+        name: "Meeting Brief",
+        type: "brief" as const,
+        text: "Risk: regional leaders need a concise rollout narrative. Action: align owners before the steering committee."
+      }
+    ];
+    const contextPack = buildContextPackFromInputs({
+      clientProfile: {
+        id: "northstar",
+        name: "Northstar Utilities Group",
+        segment: "Energy and utilities",
+        stage: "New product rollout",
+        ownedTools: ["Inspections", "Forms", "Analytics"],
+        businessGoals: ["Prepare leadership for a rollout decision."],
+        risks: ["Inspection owners need role clarity."],
+        stakeholders: []
+      },
+      sourceDocuments
+    });
+    const deckPlan = generateDeckPlan(
+      "Create an ad hoc leadership brief from the source context.",
+      [],
+      brandContract,
+      {
+        recipeId: "ad_hoc_brand_safe_deck",
+        sourceDocuments,
+        contextPack
+      }
+    );
+
+    expect(deckPlan.slides.some((slide) => slide.layout_id === "adoption_kpi_scorecard")).toBe(false);
+    expect(deckPlan.slides.some((slide) => slide.layout_id === "usage_trend")).toBe(false);
+    expectValidAccurateAndFit(deckPlan, sourceDocuments, contextPack);
+  });
+
+  it("chunks over-capacity arrays before fit approval", () => {
+    const deckPlan = generateFixtureDeck();
+    const agenda = deckPlan.slides.find((slide) => slide.layout_id === "agenda");
+
+    if (!agenda) {
+      throw new Error("Expected agenda slide.");
+    }
+
+    agenda.fields.agenda_items = [
+      "Executive context",
+      "Adoption health",
+      "Workflow signals",
+      "Risk review",
+      "Recommendation detail",
+      "Next-quarter plan",
+      "Source evidence",
+      "Metric appendix"
+    ];
+
+    const rawFit = auditDeckFit({ deckPlan, brandContract });
+    const chunkedPlan = chunkDeckPlanContent(deckPlan);
+    const chunkedFit = auditDeckFit({ deckPlan: chunkedPlan, brandContract });
+
+    expect(rawFit.passed).toBe(false);
+    expect(chunkedPlan.slides.filter((slide) => slide.layout_id === "agenda").length).toBeGreaterThan(1);
+    expect(chunkedFit.passed, chunkedFit.checks.filter((check) => !check.passed).map((check) => check.detail).join("\n")).toBe(true);
+  });
+
+  it("parses BI-style metric exports into business metric snapshots", () => {
+    const snapshots = parseBusinessMetricRows(
+      [
+        {
+          client_name: "Summit Ridge Constructors",
+          period: "Q2 2026",
+          Budget: "42",
+          Commitments: "38",
+          Analytics: "19"
+        }
+      ],
+      {
+        source: "BI export",
+        category: "product_usage"
+      }
+    );
+
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0].metrics.map((metric) => metric.key)).toContain("budget");
+    expect(snapshots[0].metrics.find((metric) => metric.key === "commitments")?.value).toBe(38);
+  });
+
+  it("renders a no-template PPTX with embedded brand media and a clean package audit", async () => {
     const deckPlan = generateFixtureDeck();
     const buffer = await renderPptx(deckPlan, brandContract);
     const zip = await JSZip.loadAsync(buffer);
