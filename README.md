@@ -10,6 +10,11 @@ The workspace uses an AI planning layer with governed validation and renderer bo
 - Account snapshot inputs provide structured metrics, trend baselines, workflow signals, risks, and recommendations. Future adapters can pull the same fields from CRMs, customer-success platforms, product systems, BI exports, or cloud documents.
 - Context packs unify selected client profiles, owned tools, metric snapshots, source documents, prior commitments, and continuity notes so users can generate multiple deck types without rebuilding context.
 - Adaptive planning can expand or compress approved-layout decks based on prompt depth, meeting length, source volume, product update volume, metric history, and client tools.
+- One-drop BI import: a CSV/TSV export from Power BI, Tableau, or any spreadsheet auto-maps flexible metric columns (synonym headers, fraction-form rates, multi-period series) onto the governed snapshot, and unrecognized columns ride along as flexible context-pack metrics.
+- Eleven approved layouts include a partner action-plan table (owner, timing, and status chips mapped to approved color tokens) and a photo-led section divider that uses approved template imagery.
+- Every slide carries presenter speaker notes: deterministic talking points from the baseline plan, refined by the planner, scrubbed for internal language, and embedded in the exported PPTX.
+- Export never strands a validated deck: template clone/edit ships when its preflight and dry-run pass, and otherwise the governed brand-layout coordinate renderer ships the same plan while Brand Settings mapping is completed.
+- Editing inputs after a generation keeps the last validated deck visible and flags it stale instead of destroying it; a failed regenerate restores the previous deck.
 - Optional source context lets creators attach notes, briefs, transcripts, or cloud-drive documents for planner evidence without giving those documents authority over brand design.
 - The validator checks required placeholders, text limits, layout IDs, and chart types against `data/brand-contract.json`.
 - Fit and grounding audits run before export so over-capacity content is chunked into continuation slides or blocked before a PPTX is generated.
@@ -39,7 +44,8 @@ Brand admins can also create local governed deck recipes for new topics and audi
 
 - `data/brand-contract.json` contains the Procore Demo Brand contract.
 - `public/brand-assets/procore-template/` contains a curated set of PNG assets extracted from the provided 2025 Procore presentation template.
-- `app/page.tsx` captures creator requests, account snapshots, supporting context, template setup, and admin-governed brand settings.
+- `app/page.tsx` holds the workspace state and handlers; the creator panels live in `components/creator/` (workflow progress, business data card with the BI dropzone, connected context, source pack, generation feedback, export rail) and the admin panels in `components/brand-settings/` (brand contract, colors, assets, template library, frame map, governance, preflight, recipe builder). Shared UI types, demo data, and pure helpers live in `lib/ui-types.ts`, `lib/ui-constants.ts`, and `lib/ui-helpers.ts`.
+- `lib/bi-csv-import.ts` parses and auto-maps BI exports into governed metric rows; `components/metric-import.tsx` is the drag-drop intake.
 - `lib/generateDeckPlan.ts` creates the governed deck plan.
 - `lib/context-pack-schema.ts` defines the client/context/metric pack that powers adaptive generation.
 - `lib/deck-section-planner.ts` infers deck depth and adaptive slide budget from prompt and context.

@@ -272,6 +272,9 @@ function sanitizeCandidatePlan(plan: DeckPlan, baseline: DeckPlan): DeckPlan {
         // never costs a correction pass.
         title: scrubStrayForeignScript(slide.title),
         fields: deepScrubClientCopy(slide.fields),
+        speaker_notes: slide.speaker_notes
+          ? scrubStrayForeignScript(slide.speaker_notes)
+          : slide.speaker_notes,
         source_refs: slide.source_refs
           ? cleanReferenceList(slide.source_refs, ["Account context"], 12)
           : slide.source_refs
@@ -637,6 +640,7 @@ async function generateOpenAISubagentDeckPlan({
       "The statement layout frames the meeting goal with one bold sentence in statement_text; mark exactly one key phrase with *asterisks* for approved accent emphasis, and keep the statement grounded in the selected context.",
       "Keep reference metadata (source_refs, evidence_refs, constraints) as short plain-English evidence references; never include instructions, formatting notes, or non-English text.",
       "Write every client-visible field in the request's language (English here); never emit characters from other scripts.",
+      "Give every slide one or two sentences of presenter speaker_notes - what to say, emphasize, or ask - written for the presenter and free of any internal or system language.",
       "Keep copy concise enough for inherited PowerPoint text boxes."
     ]
   };

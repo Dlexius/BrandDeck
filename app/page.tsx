@@ -35,7 +35,7 @@ import { CLIENT_PROFILES, DEFAULT_PROMPT, DEFAULT_RECIPE_BUILDER, EMPTY_BUSINESS
 import { brandColorTokenLabel, businessSnapshotToRows, createSourceDocument, isHexColor, mergeSourceDocuments, recipeFromBuilder, safeDownloadFileName } from "@/lib/ui-helpers";
 import type { BrandAssetSummary, BrandContractApiResponse, BrandPreflightReport, BusinessSnapshotState, CreatorWorkflowStep, ExportCertificate, GeneratePlanApiResponse, GoogleDriveConnectorStatus, GoogleDriveFileOption, GoogleDriveImportResponse, GoogleWorkspaceSourceType, RecipeBuilderState, SettingsSection, SourceDocumentSummary, TemplateGovernanceReport, TemplateKitSummary, WorkspaceView } from "@/lib/ui-types";
 import { ValidationReport, validateDeckPlan } from "@/lib/validateDeckPlan";
-import { AlertTriangle, ArrowRight, Fingerprint, Loader2, Lock, Presentation, RotateCcw, Search, Sparkles, Type, Upload, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, Loader2, Lock, RotateCcw, Sparkles } from "lucide-react";
 
 export default function Home() {
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
@@ -2585,7 +2585,10 @@ export default function Home() {
                             Review the inputs, then generate a governed PPTX.
                           </p>
                         </div>
-                        <StatusStrip report={validationReport} />
+                        <StatusStrip
+                          report={validationReport}
+                          stale={inputsStale}
+                        />
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <div className="grid gap-3 md:grid-cols-3">

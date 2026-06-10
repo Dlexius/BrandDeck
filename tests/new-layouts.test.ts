@@ -215,4 +215,33 @@ describe("rendering the new layouts", () => {
     const allXml = slideXml.join(" ");
     expect(allXml).toContain("FF5200");
   });
+
+  it("ships presenter speaker notes inside the PPTX package", async () => {
+    const deckPlan = generateDeckPlan(
+      "Prepare the quarterly business review.",
+      loadFixtureRows(),
+      brandContract,
+      { recipeId: "quarterly_business_review" }
+    );
+    const slidesWithNotes = deckPlan.slides.filter(
+      (slide) => slide.speaker_notes
+    );
+
+    expect(slidesWithNotes.length).toBeGreaterThanOrEqual(8);
+
+    const buffer = await renderPptx(deckPlan, brandContract);
+    const zip = await JSZip.loadAsync(buffer);
+    const noteFiles = Object.keys(zip.files).filter(
+      (name) => name.startsWith("ppt/notesSlides/notesSlide") && name.endsWith(".xml")
+    );
+
+    expect(noteFiles.length).toBeGreaterThanOrEqual(slidesWithNotes.length);
+
+    const notesXml = await Promise.all(
+      noteFiles.map((name) => zip.file(name)!.async("string"))
+    );
+    expect(
+      notesXml.some((xml) => xml.includes("row by row"))
+    ).toBe(true);
+  });
 });

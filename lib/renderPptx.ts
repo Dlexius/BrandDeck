@@ -1345,6 +1345,22 @@ async function enforceApprovedPackageColors(
   return zip.generateAsync({ type: "nodebuffer" });
 }
 
+// Presenter notes ship inside the client file, so they get the same
+// fail-safe treatment as slide copy: a note that smells internal is dropped,
+// never exported.
+const INTERNAL_NOTE_PATTERN =
+  /\b(openai|api|model|renderer|prompt|deck plan|brand contract|layout id|object id|placeholder)\b/i;
+
+function addSpeakerNotes(slide: Slide, slideDef: DeckSlide) {
+  const notes = (slideDef.speaker_notes ?? "").replace(/\s+/g, " ").trim();
+
+  if (!notes || INTERNAL_NOTE_PATTERN.test(notes)) {
+    return;
+  }
+
+  slide.addNotes(notes);
+}
+
 export async function renderPptx(
   deckPlan: DeckPlan,
   brandContract: BrandContract
@@ -1355,6 +1371,7 @@ export async function renderPptx(
   deckPlan.slides.forEach((slideDef, index) => {
     const slide = pptx.addSlide();
     renderSlide(pptx, slide, brandContract, deckPlan, slideDef, index + 1);
+    addSpeakerNotes(slide, slideDef);
   });
 
   const output = (await pptx.write({ outputType: "nodebuffer" })) as Buffer;

@@ -1737,6 +1737,8 @@ export function generateDeckPlan(
                 ? productUpdateAgendaItems()
                 : agendaItemsForRecipe(recipe)
         },
+          speaker_notes:
+            "Walk the flow once and ask the room to flag any priority or timing changes before diving in.",
           source_refs: ["Prompt: report structure", ...sourceRefsForRecipe]
         };
       case "executive_summary":
@@ -1759,6 +1761,10 @@ export function generateDeckPlan(
             78
           )
         },
+        speaker_notes: compactText(
+          `Open with the ${current.adoption_score}% adoption headline and the business impact, then let the points carry the detail. Land on the decision you need from the room.`,
+          300
+        ),
         source_refs: [
           "Account metric: adoption_score",
           "Account metric: active_users",
@@ -1788,6 +1794,10 @@ export function generateDeckPlan(
             metricsNeedConfirmation
           )
         },
+        speaker_notes: compactText(
+          `Pause on licensed coverage (${adoptionRate}%) and mobile usage (${current.mobile_usage_rate}%); invite questions on any number before moving on.`,
+          300
+        ),
         source_refs: [
           "Account metric: active_users",
           "Account metric: licensed_users",
@@ -1826,6 +1836,10 @@ export function generateDeckPlan(
             72
           )
         },
+          speaker_notes: compactText(
+            `Tell the story from ${first.report_period} to ${current.report_period}: what drove the movement and what keeps it going.`,
+            300
+          ),
           source_refs: appendEvidence([
             "Account metric: report_period",
             "Account metric: adoption_score",
@@ -1873,6 +1887,10 @@ export function generateDeckPlan(
               48
             )
           },
+          speaker_notes: compactText(
+            `Contrast the ${derivedTop || current.top_feature} strength with the ${current.lowest_feature || derivedLowest} focus area, and ask who owns closing the gap.`,
+            300
+          ),
           source_refs: [
             "Context metrics: feature signals",
             "Account metric: top_feature",
@@ -1894,6 +1912,8 @@ export function generateDeckPlan(
             safeSourceActions
           ).map((recommendation) => compactText(recommendation, 150))
         },
+        speaker_notes:
+          "Read the risk once, then spend the time on the recommended actions and who owns each one.",
         source_refs: appendEvidence([
           "Account context: risk_summary",
           "Account context: recommendation_1",
@@ -1910,6 +1930,8 @@ export function generateDeckPlan(
             deck_label: chromeLabel,
             steps: nextStepLines().map((step) => compactText(step, 130))
         },
+          speaker_notes:
+            "Close by restating each action and agreeing on the follow-up date before the meeting ends.",
           source_refs: appendEvidence(
             ["Account context: recommendations", "Prompt: action emphasis", ...sourceRefsForRecipe],
             sourceDocRefs
@@ -1945,6 +1967,8 @@ export function generateDeckPlan(
             ),
             action_items: buildActionPlanItems(recipe, current, nextStepLines())
           },
+          speaker_notes:
+            "Walk the table row by row; confirm each owner and timing in the room, and update any status that has changed.",
           source_refs: appendEvidence(
             [
               "Account context: recommendations",
@@ -1989,6 +2013,8 @@ export function generateDeckPlan(
               160
             )
         },
+          speaker_notes:
+            "Reference only; offer the full data detail through the account team if asked.",
           source_refs: appendEvidence(
             ["Account metrics: all fields", "Brand contract: approved_layouts", ...sourceRefsForRecipe],
             [...sourceDocRefs, ...sourceEvidence.appendixNotes],

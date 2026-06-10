@@ -9,15 +9,26 @@ import { ValidationReport } from "@/lib/validateDeckPlan";
 import { AlertTriangle, CheckCircle2, Download, FileText, Loader2, Lock, Presentation } from "lucide-react";
 
 export function StatusStrip({
-  report
+  report,
+  stale = false
 }: {
   report: ValidationReport | null;
+  stale?: boolean;
 }) {
   if (!report) {
     return (
       <div className="flex items-center gap-2 rounded-md bg-[#F3F3F3] px-3 py-2 text-sm font-semibold text-[#787E89]">
         <FileText className="h-4 w-4" />
         No Deck Generated
+      </div>
+    );
+  }
+
+  if (report.passed && stale) {
+    return (
+      <div className="flex items-center gap-2 rounded-md bg-[#FFF7F2] px-3 py-2 text-sm font-semibold text-[#A05A00]">
+        <AlertTriangle className="h-4 w-4" />
+        Inputs Changed
       </div>
     );
   }
@@ -229,7 +240,7 @@ export function ValidationPanel({
             Ready to Export
           </h2>
           <div className="mt-3">
-            <StatusStrip report={report} />
+            <StatusStrip report={report} stale={inputsStale} />
           </div>
         </div>
 

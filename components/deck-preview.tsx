@@ -594,13 +594,15 @@ function SlideThumb({
   plan,
   tokens,
   pageNumber,
-  heroPhoto
+  heroPhoto,
+  showNotes
 }: {
   slide: DeckSlide;
   plan: DeckPlan;
   tokens: Tokens;
   pageNumber: number;
   heroPhoto?: string;
+  showNotes?: boolean;
 }) {
   const isTitle = slide.layout_id === "title_client_report";
   const isAgenda =
@@ -666,6 +668,11 @@ function SlideThumb({
         <span className="truncate">{slide.title}</span>
         <span className="font-mono">{String(pageNumber).padStart(2, "0")}</span>
       </figcaption>
+      {showNotes && slide.speaker_notes ? (
+        <p className="mt-1 rounded-sm bg-[#FCFBFA] px-2 py-1.5 text-[10px] font-medium leading-4 text-[#69707D] ring-1 ring-[#EFEAE5]">
+          {slide.speaker_notes}
+        </p>
+      ) : null}
     </figure>
   );
 }
@@ -678,9 +685,11 @@ export function DeckPreview({
   brandContract: BrandContract;
 }) {
   const [expanded, setExpanded] = useState(true);
+  const [showNotes, setShowNotes] = useState(false);
   const tokens = brandContract.approved_color_tokens ?? {};
   const heroPhoto = brandContract.template_assets?.hero_photo;
   const slides = deckPlan.slides ?? [];
+  const notesCount = slides.filter((slide) => slide.speaker_notes).length;
 
   return (
     <section className="rounded-lg border border-[#E5E0DB] bg-white">
@@ -693,13 +702,28 @@ export function DeckPreview({
             {slides.length} slides · review the story before exporting
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setExpanded((value) => !value)}
-          className="rounded-sm px-2 py-1 text-[11px] font-bold uppercase tracking-[0.08em] text-[#787E89] transition-colors hover:text-brand-charcoal"
-        >
-          {expanded ? "Collapse" : "Expand"}
-        </button>
+        <div className="flex items-center gap-1">
+          {notesCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowNotes((value) => !value)}
+              className={`rounded-sm px-2 py-1 text-[11px] font-bold uppercase tracking-[0.08em] transition-colors ${
+                showNotes
+                  ? "bg-[#FFF7F2] text-brand-orange"
+                  : "text-[#787E89] hover:text-brand-charcoal"
+              }`}
+            >
+              {showNotes ? "Hide Notes" : `Notes (${notesCount})`}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setExpanded((value) => !value)}
+            className="rounded-sm px-2 py-1 text-[11px] font-bold uppercase tracking-[0.08em] text-[#787E89] transition-colors hover:text-brand-charcoal"
+          >
+            {expanded ? "Collapse" : "Expand"}
+          </button>
+        </div>
       </header>
       {expanded && (
         <div className="grid grid-cols-2 gap-4 px-5 pb-5 md:grid-cols-3">
@@ -711,6 +735,7 @@ export function DeckPreview({
               tokens={tokens}
               pageNumber={index + 1}
               heroPhoto={heroPhoto}
+              showNotes={showNotes}
             />
           ))}
         </div>
