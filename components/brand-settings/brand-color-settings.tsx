@@ -125,7 +125,7 @@ export function BrandColorSettingsPanel({
           </h2>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-[#787E89]">
             Admin-managed tokens used by the app theme, validation, manifests,
-            and governed renderer.
+            and every exported deck.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -220,7 +220,7 @@ export function BrandColorSettingsPanel({
               </p>
               <p className="mt-2 text-xs font-semibold leading-5 text-[#787E89]">
                 Saved colors become the active contract for generated deck
-                plans and renderer tokens.
+                plans and exported decks.
               </p>
               <div className="mt-4 flex gap-2">
                 <span

@@ -43,7 +43,7 @@ export function BrandContractPanel({
     ).length ?? 0;
 
   return (
-    <aside className="overflow-y-auto border-r border-[#E5E0DB] bg-white p-6">
+    <section className="rounded-md border border-[#E5E0DB] bg-white p-6">
       <div className="space-y-7">
         <div>
           <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
@@ -308,7 +308,7 @@ export function BrandContractPanel({
             <div className="flex gap-2 text-sm leading-5 text-brand-ink">
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-orange" />
               <span>
-                AI may plan and draft content, but the renderer owns every brand decision.
+                BrandDeck drafts the story; your brand system makes every visual decision.
               </span>
             </div>
             {brandContract.forbidden_rules.slice(0, 4).map((rule) => (
@@ -320,6 +320,6 @@ export function BrandContractPanel({
           </div>
         </div>
       </div>
-    </aside>
+    </section>
   );
 }

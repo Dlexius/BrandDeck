@@ -6,6 +6,7 @@ import { BrandAssetInventory } from "@/components/brand-settings/brand-asset-inv
 import { BrandColorSettingsPanel } from "@/components/brand-settings/brand-color-settings";
 import { BrandContractPanel } from "@/components/brand-settings/brand-contract-panel";
 import { BrandKitReadiness } from "@/components/brand-settings/brand-kit-readiness";
+import { BrandOverview } from "@/components/brand-settings/brand-overview";
 import { BrandPreflightPanel } from "@/components/brand-settings/brand-preflight-panel";
 import { FrameMapPreview } from "@/components/brand-settings/frame-map-preview";
 import { SettingsSectionNav } from "@/components/brand-settings/settings-nav";
@@ -140,7 +141,7 @@ export default function Home() {
   const [activeCreatorStep, setActiveCreatorStep] =
     useState<CreatorWorkflowStep>("brief");
   const [settingsSection, setSettingsSection] =
-    useState<SettingsSection>("brand");
+    useState<SettingsSection>("overview");
   const [activeBrandContract, setActiveBrandContract] =
     useState<BrandContract>(defaultBrandContract);
   const [brandColorDraft, setBrandColorDraft] = useState<Record<string, string>>(
@@ -2226,7 +2227,6 @@ export default function Home() {
   const workflowBusy =
     generating || preparingExport || auditingExport || exporting;
   const showExportRail =
-    workspaceView === "settings" ||
     (workspaceView === "generate" &&
       activeCreatorStep === "export" &&
       (Boolean(deckPlan) ||
@@ -2273,23 +2273,23 @@ export default function Home() {
             ? showExportRail
               ? "lg:grid-cols-[minmax(0,1fr)_360px]"
               : "lg:grid-cols-[minmax(0,1fr)]"
-            : "lg:grid-cols-[304px_minmax(0,1fr)_360px]"
+            : "lg:grid-cols-[236px_minmax(0,1fr)]"
         }`}
       >
         {workspaceView === "settings" && (
-          <BrandContractPanel
-            brandContract={activeBrandContract}
-            templateFileName={templateFileName}
-            templateStatus={templateStatus}
-            templateKit={templateKit}
-            brandAssets={brandAssets}
-            templateUploading={templateUploading}
-            assetUploading={assetUploading}
-            adoptingIdentity={adoptingIdentity}
-            onTemplateUpload={handleTemplateUpload}
-            onAssetUpload={handleAssetUpload}
-            onAdoptTemplateIdentity={handleAdoptTemplateIdentity}
-          />
+          <aside className="border-b border-[#E5E0DB] bg-[#F4F1EE] px-4 py-5 lg:border-b-0 lg:border-r">
+            <div className="lg:sticky lg:top-5">
+              <SettingsSectionNav
+                activeSection={settingsSection}
+                onSectionChange={setSettingsSection}
+                templateKit={templateKit}
+                brandPreflight={brandPreflight}
+                templateGovernance={templateGovernance}
+                customRecipes={customRecipes}
+                overriddenColorTokens={overriddenColorTokens}
+              />
+            </div>
+          </aside>
         )}
 
         <section className="min-w-0 bg-[#FBFAF9] px-6 py-6 xl:px-10">
@@ -2304,7 +2304,7 @@ export default function Home() {
                 <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-[#787E89]">
                   {workspaceView === "generate"
                     ? "Describe the deck you need, add relevant context, and BrandDeck will prepare a brand-governed export without letting prompts change the visual system."
-                    : "Admins maintain the brand contract, approved templates, object maps, assets, and deck recipes that keep every generated presentation on brand."}
+                    : "Set up your brand once - template, colors, assets, and approved deck types - and every generated presentation stays on brand."}
                 </p>
               </div>
               {workspaceView === "generate" && (
@@ -2321,44 +2321,36 @@ export default function Home() {
                 </Button>
               )}
             </div>
-            {workspaceView === "settings" && (
-              <div className="grid gap-3 text-sm font-semibold text-[#787E89] md:grid-cols-3">
-                {["Upload Brand Kit", "Map Objects", "Publish Controls"].map(
-                  (step, index) => (
-                    <div key={step} className="flex items-center gap-3">
-                      <span
-                        className={`grid h-7 w-7 place-items-center rounded-full text-xs font-black ${
-                          index === 0
-                            ? "bg-brand-orange text-white"
-                            : "bg-white text-[#787E89] ring-1 ring-[#D7CABF]"
-                        }`}
-                      >
-                        {index + 1}
-                      </span>
-                      <span className="text-brand-ink">{step}</span>
-                      {index < 2 && (
-                        <span className="hidden h-px flex-1 bg-[#D7CABF] md:block" />
-                      )}
-                    </div>
-                  )
-                )}
-              </div>
-            )}
-
             {workspaceView === "settings" ? (
               <>
-                <SettingsSectionNav
-                  activeSection={settingsSection}
-                  onSectionChange={setSettingsSection}
-                  templateKit={templateKit}
-                  brandPreflight={brandPreflight}
-                  templateGovernance={templateGovernance}
-                  customRecipes={customRecipes}
-                  overriddenColorTokens={overriddenColorTokens}
-                />
+                {settingsSection === "overview" && (
+                  <BrandOverview
+                    brandContract={activeBrandContract}
+                    templateKit={templateKit}
+                    brandAssets={brandAssets}
+                    brandPreflight={brandPreflight}
+                    templateGovernance={templateGovernance}
+                    customRecipes={customRecipes}
+                    onSectionChange={setSettingsSection}
+                  />
+                )}
 
                 {settingsSection === "brand" && (
                   <>
+                    <BrandContractPanel
+                      brandContract={activeBrandContract}
+                      templateFileName={templateFileName}
+                      templateStatus={templateStatus}
+                      templateKit={templateKit}
+                      brandAssets={brandAssets}
+                      templateUploading={templateUploading}
+                      assetUploading={assetUploading}
+                      adoptingIdentity={adoptingIdentity}
+                      onTemplateUpload={handleTemplateUpload}
+                      onAssetUpload={handleAssetUpload}
+                      onAdoptTemplateIdentity={handleAdoptTemplateIdentity}
+                    />
+
                     <BrandKitReadiness
                       brandContract={activeBrandContract}
                       templateKit={templateKit}

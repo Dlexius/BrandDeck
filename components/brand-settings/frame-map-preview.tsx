@@ -40,7 +40,7 @@ export function FrameMapPreview({
       <Card>
         <CardHeader>
           <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
-            Template Frame Map
+            Slide Mapping
           </h2>
           <p className="mt-1 text-sm text-[#787E89]">
             Upload a PPTX template to map approved BrandDeck layouts to source
@@ -63,7 +63,7 @@ export function FrameMapPreview({
       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
-            Template Frame Map
+            Slide Mapping
           </h2>
           <p className="mt-1 text-sm text-[#787E89]">
             Approved layouts are bound to source slides before generation.

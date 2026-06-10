@@ -39,8 +39,8 @@ export function BrandKitReadiness({
       icon: ImageIcon
     },
     {
-      label: "Drift Guard",
-      value: "AI cannot choose geometry",
+      label: "Brand Lock",
+      value: "Layouts, colors, and fonts stay approved",
       icon: Lock
     }
   ];
@@ -90,58 +90,10 @@ export function BrandKitReadiness({
             Governed uploads: {brandAssets.map((asset) => asset.fileName).join(", ")}
           </p>
         )}
-        <div className="mt-4 grid gap-3 border-t border-[#EFEAE5] pt-4 md:grid-cols-3">
-          {[
-            {
-              label: "Brand Admin",
-              value: "Approves templates, assets, colors, fonts, and review rules."
-            },
-            {
-              label: "Deck Creator",
-              value: "Uses prompts, business data, and source context to request a deck."
-            },
-            {
-              label: "Deck Modes",
-              value: "Predefined and ad hoc decks resolve to approved layouts."
-            }
-          ].map((item) => (
-            <div
-              key={item.label}
-              className="rounded-md bg-white px-4 py-3 ring-1 ring-[#EFEAE5]"
-            >
-              <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#787E89]">
-                {item.label}
-              </p>
-              <p className="mt-2 text-xs font-semibold leading-5 text-brand-ink">
-                {item.value}
-              </p>
-            </div>
-          ))}
-        </div>
         <div className="mt-4 flex items-start gap-3 rounded-md bg-[#F3F3F3] px-4 py-3 text-sm font-semibold leading-6 text-brand-ink">
           <Lock className="mt-0.5 h-4 w-4 shrink-0 text-brand-orange" />
           <span>{workspaceStatus}</span>
         </div>
-        {templateKit && (
-          <div className="mt-4 grid gap-3 border-t border-[#EFEAE5] pt-4 md:grid-cols-2">
-            <div className="rounded-md bg-[#111111] px-4 py-3 text-white">
-              <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-white/60">
-                Prepared Template Path
-              </p>
-              <p className="mt-1 text-sm font-bold">
-                Frame map ready
-              </p>
-            </div>
-            <div className="rounded-md bg-[#FFF1E8] px-4 py-3 text-[#6B2A00]">
-              <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#9A4A11]">
-                Primary Export Renderer
-              </p>
-              <p className="mt-1 text-sm font-bold">
-                Template-based export
-              </p>
-            </div>
-          </div>
-        )}
       </CardContent>
     </Card>
   );

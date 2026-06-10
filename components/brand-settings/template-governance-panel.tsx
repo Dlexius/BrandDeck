@@ -33,7 +33,7 @@ export function TemplateGovernancePanel({
           </h2>
           <p className="mt-1 text-sm text-[#787E89]">
             Upload a template to inspect editable objects, data bindings, and
-            drift controls.
+            edit permissions.
           </p>
         </CardHeader>
       </Card>
@@ -99,7 +99,7 @@ export function TemplateGovernancePanel({
             ) : (
               <Download className="h-4 w-4" />
             )}
-            Export Object Map
+            Export Mapping File
           </Button>
           <label
             className={`inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-md border border-[#D7CABF] bg-[#F3F3F3] px-3 text-sm font-bold text-brand-charcoal transition hover:bg-[#E8E5E1] ${

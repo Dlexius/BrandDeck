@@ -210,7 +210,12 @@ export type RecipeBuilderState = {
 
 export type WorkspaceView = "generate" | "settings";
 
-export type SettingsSection = "brand" | "templates" | "governance" | "recipes";
+export type SettingsSection =
+  | "overview"
+  | "brand"
+  | "templates"
+  | "governance"
+  | "recipes";
 
 export type CreatorWorkflowStep = "brief" | "context" | "export";
 

@@ -123,8 +123,8 @@ export function ExportQualityPanel({
           ? `${templateGovernance.summary.governanceScore}% approved${
               !objectMapReady && canExport ? " (template export only)" : ""
             }`
-          : "Object map not loaded"
-        : "No template object map required"
+          : "Template mapping not loaded"
+        : "No template mapping required"
     },
     {
       label: "Export check",

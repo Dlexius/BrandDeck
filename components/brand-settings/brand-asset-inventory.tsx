@@ -46,7 +46,7 @@ export function BrandAssetInventory({
             Brand Asset Inventory
           </h2>
           <p className="mt-1 text-sm text-[#787E89]">
-            Fingerprinted assets available for admin review and renderer mapping.
+            Uploaded logos, photos, and textures - label each one so exports can use it.
           </p>
         </div>
         <div className="flex items-center gap-2 rounded-md bg-[#F3F3F3] px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] text-brand-ink">
