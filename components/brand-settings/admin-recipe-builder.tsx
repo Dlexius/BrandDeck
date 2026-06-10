@@ -9,6 +9,7 @@ import { MAX_ADMIN_RECIPE_LAYOUTS } from "@/lib/ui-constants";
 import { layoutDefinition } from "@/lib/ui-helpers";
 import type { RecipeBuilderState } from "@/lib/ui-types";
 import { Layers3, ShieldCheck } from "lucide-react";
+import { LayoutMiniature } from "@/components/deck-preview";
 
 export function AdminRecipeBuilder({
   brandContract,
@@ -34,11 +35,10 @@ export function AdminRecipeBuilder({
       <CardHeader className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
-            Governed Recipe Builder
+            Deck Type Builder
           </h2>
           <p className="mt-1 text-sm text-[#787E89]">
-            Admin-created deck structures for new topics and audiences. Every
-            slide still resolves to an approved template layout.
+            Compose a new deck type from approved layouts. Creators pick it by name; every slide stays on brand.
           </p>
         </div>
         <div className="rounded-sm bg-[#F3F3F3] px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] text-brand-ink">
@@ -111,11 +111,18 @@ export function AdminRecipeBuilder({
                 return (
                   <div
                     key={`${layoutId}-${index}`}
-                    className="grid grid-cols-[28px_minmax(0,1fr)_72px] items-center gap-3 border-b border-[#EFEAE5] pb-2 last:border-b-0 last:pb-0"
+                    className="grid grid-cols-[28px_88px_minmax(0,1fr)_72px] items-center gap-3 border-b border-[#EFEAE5] pb-2 last:border-b-0 last:pb-0"
                   >
                     <span className="font-mono text-xs font-bold text-[#787E89]">
                       {String(index + 1).padStart(2, "0")}
                     </span>
+                    <div className="w-[88px]">
+                      <LayoutMiniature
+                        layoutId={layoutId}
+                        tokens={brandContract.approved_color_tokens}
+                        heroPhoto={brandContract.template_assets?.hero_photo}
+                      />
+                    </div>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-bold text-brand-charcoal">
                         {layout?.name ?? layoutId}
@@ -148,9 +155,16 @@ export function AdminRecipeBuilder({
                   type="button"
                   disabled={builder.layoutIds.length >= MAX_ADMIN_RECIPE_LAYOUTS}
                   onClick={() => onAddLayout(layout.layout_id)}
-                  className="flex w-full items-center justify-between gap-3 rounded-md border border-[#E5E0DB] bg-white px-3 py-2 text-left text-xs font-bold text-brand-charcoal transition hover:border-brand-orange disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex w-full items-center gap-3 rounded-md border border-[#E5E0DB] bg-white px-3 py-2 text-left text-xs font-bold text-brand-charcoal transition hover:border-brand-orange disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <span className="truncate">{layout.name}</span>
+                  <span className="w-[72px] shrink-0">
+                    <LayoutMiniature
+                      layoutId={layout.layout_id}
+                      tokens={brandContract.approved_color_tokens}
+                      heroPhoto={brandContract.template_assets?.hero_photo}
+                    />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{layout.name}</span>
                   <Layers3 className="h-3.5 w-3.5 shrink-0 text-brand-orange" />
                 </button>
               ))}
@@ -160,19 +174,19 @@ export function AdminRecipeBuilder({
 
         <div className="flex flex-col gap-3 border-t border-[#E5E0DB] pt-4 md:flex-row md:items-center md:justify-between">
           <div className="text-xs font-semibold leading-5 text-[#787E89]">
-            Custom recipes are saved to workspace storage. Exported manifests
-            still prove the selected deck used approved layout IDs.
+            Saved deck types appear in the creator's deck-type picker and always
+            resolve to approved layouts.
           </div>
           <Button onClick={onCreateRecipe}>
             <ShieldCheck className="h-4 w-4" />
-            Save Governed Recipe
+            Save Deck Type
           </Button>
         </div>
 
         {customRecipes.length > 0 && (
           <div className="border-t border-[#E5E0DB] pt-4">
             <p className="mb-2 text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
-              Admin Recipe Registry
+              Your Custom Deck Types
             </p>
             <div className="space-y-2">
               {customRecipes.map((recipe) => (

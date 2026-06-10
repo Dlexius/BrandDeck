@@ -5,7 +5,6 @@ import { AdminRecipeBuilder } from "@/components/brand-settings/admin-recipe-bui
 import { BrandAssetInventory } from "@/components/brand-settings/brand-asset-inventory";
 import { BrandColorSettingsPanel } from "@/components/brand-settings/brand-color-settings";
 import { BrandContractPanel } from "@/components/brand-settings/brand-contract-panel";
-import { BrandKitReadiness } from "@/components/brand-settings/brand-kit-readiness";
 import { BrandOverview } from "@/components/brand-settings/brand-overview";
 import { BrandPreflightPanel } from "@/components/brand-settings/brand-preflight-panel";
 import { FrameMapPreview } from "@/components/brand-settings/frame-map-preview";
@@ -2323,6 +2322,14 @@ export default function Home() {
             </div>
             {workspaceView === "settings" ? (
               <>
+                {notice && (
+                  <WorkflowNotice
+                    message={notice}
+                    details={noticeDetails}
+                    tone={noticeTone}
+                  />
+                )}
+
                 {settingsSection === "overview" && (
                   <BrandOverview
                     brandContract={activeBrandContract}
@@ -2349,13 +2356,6 @@ export default function Home() {
                       onTemplateUpload={handleTemplateUpload}
                       onAssetUpload={handleAssetUpload}
                       onAdoptTemplateIdentity={handleAdoptTemplateIdentity}
-                    />
-
-                    <BrandKitReadiness
-                      brandContract={activeBrandContract}
-                      templateKit={templateKit}
-                      brandAssets={brandAssets}
-                      workspaceStatus={workspaceStatus}
                     />
 
                     <BrandColorSettingsPanel
@@ -2391,6 +2391,7 @@ export default function Home() {
 
                     <TemplateAssetLibrary
                       templateKit={templateKit}
+                      brandAssets={brandAssets}
                       templateAssetRoles={templateAssetRoles}
                       promotingEntry={promotingTemplateAssetEntry}
                       onRoleChange={(entry, role) =>
@@ -2824,13 +2825,6 @@ export default function Home() {
               </>
             )}
 
-            {workspaceView === "settings" && notice && (
-              <WorkflowNotice
-                message={notice}
-                details={noticeDetails}
-                tone={noticeTone}
-              />
-            )}
           </div>
         </section>
 

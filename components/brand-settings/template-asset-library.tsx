@@ -5,16 +5,18 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { BRAND_ASSET_ROLE_OPTIONS } from "@/lib/ui-constants";
 import { formatBytes } from "@/lib/ui-helpers";
 import type { BrandAssetSummary, TemplateKitSummary } from "@/lib/ui-types";
-import { Loader2, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Loader2, ShieldCheck } from "lucide-react";
 
 export function TemplateAssetLibrary({
   templateKit,
+  brandAssets,
   templateAssetRoles,
   promotingEntry,
   onRoleChange,
   onPromote
 }: {
   templateKit: TemplateKitSummary | null;
+  brandAssets: BrandAssetSummary[];
   templateAssetRoles: Record<string, BrandAssetSummary["role"]>;
   promotingEntry: string;
   onRoleChange: (entry: string, role: BrandAssetSummary["role"]) => void;
@@ -23,6 +25,12 @@ export function TemplateAssetLibrary({
   if (!templateKit) {
     return null;
   }
+
+  // Already-promoted media (matched by fingerprint) shows as done in place,
+  // so approval feedback never depends on a notice elsewhere on the page.
+  const promotedFingerprints = new Set(
+    brandAssets.map((asset) => asset.fingerprint)
+  );
 
   const promotableAssets = templateKit.topAssets.filter((asset) =>
     ["png", "jpg", "jpeg", "svg"].includes(asset.extension)
@@ -126,19 +134,26 @@ export function TemplateAssetLibrary({
                     {dimensions}
                   </p>
                 </div>
-                <Button
-                  variant="secondary"
-                  className="h-9 self-end px-3"
-                  disabled={promotingEntry === asset.entry}
-                  onClick={() => onPromote(asset.entry, role)}
-                >
-                  {promotingEntry === asset.entry ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <ShieldCheck className="h-4 w-4" />
-                  )}
-                  Approve
-                </Button>
+                {promotedFingerprints.has(asset.fingerprint) ? (
+                  <div className="flex h-9 items-center justify-center gap-1.5 self-end rounded-md bg-[#ECF7EF] px-3 text-xs font-bold text-[#188038]">
+                    <CheckCircle2 className="h-4 w-4" />
+                    In Brand Library
+                  </div>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    className="h-9 self-end px-3"
+                    disabled={promotingEntry === asset.entry}
+                    onClick={() => onPromote(asset.entry, role)}
+                  >
+                    {promotingEntry === asset.entry ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ShieldCheck className="h-4 w-4" />
+                    )}
+                    Add to Brand
+                  </Button>
+                )}
               </div>
             );
           })}

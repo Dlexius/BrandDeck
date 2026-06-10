@@ -80,21 +80,21 @@ export function TemplateOnboardingWorkbench({
               .join(", ")} from brand contract`
     },
     {
-      label: "Frame map approved",
+      label: "Slide mapping approved",
       passed: Boolean(frameMapApproved),
       detail: frameMapApproved
         ? `${templateKit?.frameMap.outputSlides.length ?? 0} output slide mappings approved`
         : "Review and approve source slide mappings"
     },
     {
-      label: "Object map governed",
+      label: "Text fields mapped",
       passed: Boolean(objectMapReady),
       detail: templateGovernance
         ? `${templateGovernance.summary.editableObjectCount} editable objects mapped`
         : "Generate governance report for editable objects"
     },
     {
-      label: "Recipe coverage",
+      label: "Deck type coverage",
       passed: coveredRecipes.length === allRecipes.length && allRecipes.length > 0,
       detail: `${coveredRecipes.length}/${allRecipes.length} recipe${allRecipes.length === 1 ? "" : "s"} fully covered`
     },
@@ -118,11 +118,10 @@ export function TemplateOnboardingWorkbench({
       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
-            Template Onboarding Workbench
+            Template Readiness
           </h2>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-[#787E89]">
-            Admin view for turning an approved PPTX into a reusable generation
-            kit with locked assets, mapped objects, and covered deck recipes.
+            Track how close your uploaded template is to powering template-native exports.
           </p>
         </div>
         <div
@@ -202,13 +201,13 @@ export function TemplateOnboardingWorkbench({
           </div>
           <div className="border-l-2 border-brand-orange bg-[#F3F3F3] px-4 py-3">
             <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#787E89]">
-              Renderer Boundary
+              Brand Lock
             </p>
             <p className="mt-1 text-sm font-black text-brand-charcoal">
-              Duplicate first, edit mapped objects
+              Your slides, your styling
             </p>
             <p className="mt-1 text-xs font-semibold text-[#787E89]">
-              Prompt output cannot create new geometry, colors, or assets
+              Exports copy your template slides and fill approved text only
             </p>
           </div>
         </div>

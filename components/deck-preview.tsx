@@ -625,6 +625,40 @@ function SlideThumb({
           </div>
         )}
         <div className="h-full pt-0">
+          <LayoutBody
+            slide={slide}
+            plan={plan}
+            tokens={tokens}
+            heroPhoto={heroPhoto}
+          />
+        </div>
+      </div>
+      <figcaption className="mt-1 flex items-center justify-between text-[10px] font-semibold text-[#787E89]">
+        <span className="truncate">{slide.title}</span>
+        <span className="font-mono">{String(pageNumber).padStart(2, "0")}</span>
+      </figcaption>
+      {showNotes && slide.speaker_notes ? (
+        <p className="mt-1 rounded-sm bg-[#FCFBFA] px-2 py-1.5 text-[10px] font-medium leading-4 text-[#69707D] ring-1 ring-[#EFEAE5]">
+          {slide.speaker_notes}
+        </p>
+      ) : null}
+    </figure>
+  );
+}
+
+function LayoutBody({
+  slide,
+  plan,
+  tokens,
+  heroPhoto
+}: {
+  slide: DeckSlide;
+  plan: DeckPlan;
+  tokens: Tokens;
+  heroPhoto?: string;
+}) {
+  return (
+    <>
           {slide.layout_id === "title_client_report" && (
             <TitleSlidePreview slide={slide} plan={plan} tokens={tokens} />
           )}
@@ -662,18 +696,148 @@ function SlideThumb({
           {slide.layout_id === "next_steps" && (
             <StepsPreview slide={slide} tokens={tokens} />
           )}
-        </div>
-      </div>
-      <figcaption className="mt-1 flex items-center justify-between text-[10px] font-semibold text-[#787E89]">
-        <span className="truncate">{slide.title}</span>
-        <span className="font-mono">{String(pageNumber).padStart(2, "0")}</span>
-      </figcaption>
-      {showNotes && slide.speaker_notes ? (
-        <p className="mt-1 rounded-sm bg-[#FCFBFA] px-2 py-1.5 text-[10px] font-medium leading-4 text-[#69707D] ring-1 ring-[#EFEAE5]">
-          {slide.speaker_notes}
-        </p>
-      ) : null}
-    </figure>
+    </>
+  );
+}
+
+/** Canned sample content so admins can SEE each approved layout. */
+const SAMPLE_PLAN = {
+  client_name: "Client Name",
+  report_period: "This Quarter"
+} as DeckPlan;
+
+const SAMPLE_SLIDES: Record<string, DeckSlide> = {
+  title_client_report: {
+    layout_id: "title_client_report",
+    title: "Title",
+    fields: {
+      deck_label: "CLIENT REPORT",
+      client_name: "Client Name",
+      subtitle: "Decision-ready update for your audience",
+      report_period: "This Quarter"
+    }
+  },
+  agenda: {
+    layout_id: "agenda",
+    title: "Agenda",
+    fields: {
+      agenda_items: ["Where we stand", "Momentum", "Risks", "Next steps"]
+    }
+  },
+  statement: {
+    layout_id: "statement",
+    title: "Statement",
+    fields: {
+      statement_text: "Make adoption *a system, not a one-time push*."
+    }
+  },
+  photo_section_divider: {
+    layout_id: "photo_section_divider",
+    title: "The Next Chapter",
+    fields: { section_label: "SECTION" }
+  },
+  executive_summary: {
+    layout_id: "executive_summary",
+    title: "Executive Summary",
+    fields: {
+      business_impact: "The headline takeaway for leadership.",
+      summary_points: ["Key point one", "Key point two", "Key point three"]
+    }
+  },
+  adoption_kpi_scorecard: {
+    layout_id: "adoption_kpi_scorecard",
+    title: "KPI Scorecard",
+    fields: {
+      adoption_score: 76,
+      active_users: 244,
+      licensed_users: 325,
+      projects_active: 24,
+      mobile_usage_rate: 61,
+      metric_context: "Current health at a glance"
+    }
+  },
+  usage_trend: {
+    layout_id: "usage_trend",
+    title: "Usage Trend",
+    fields: {
+      trend_summary: "Adoption keeps climbing.",
+      trend_points: [
+        { label: "Apr", adoption_score: 64, active_users: 190 },
+        { label: "May", adoption_score: 70, active_users: 215 },
+        { label: "Jun", adoption_score: 76, active_users: 244 }
+      ]
+    }
+  },
+  feature_adoption: {
+    layout_id: "feature_adoption",
+    title: "Feature Adoption",
+    fields: {
+      feature_metrics: [
+        { feature: "Daily Logs", count: 1840 },
+        { feature: "RFIs", count: 286 },
+        { feature: "Submittals", count: 350 }
+      ],
+      top_feature: "Daily Logs",
+      lowest_feature: "Submittals"
+    }
+  },
+  risks_recommendations: {
+    layout_id: "risks_recommendations",
+    title: "Risks & Recommendations",
+    fields: {
+      risk_summary: "The one risk to address before the next review.",
+      recommendations: ["Assign an owner", "Set the cadence"]
+    }
+  },
+  action_plan_table: {
+    layout_id: "action_plan_table",
+    title: "Action Plan",
+    fields: {
+      action_items: [
+        { action: "Confirm the owner", owner: "Sponsor", timing: "30 days", status: "on_track" },
+        { action: "Close the gap", owner: "Team lead", timing: "60 days", status: "at_risk" },
+        { action: "Review progress", owner: "Account team", timing: "90 days", status: "needs_owner" }
+      ]
+    }
+  },
+  next_steps: {
+    layout_id: "next_steps",
+    title: "Next Steps",
+    fields: {
+      steps: ["First action", "Second action", "Third action"]
+    }
+  }
+};
+
+/** Tiny schematic of an approved layout for pickers and builders. */
+export function LayoutMiniature({
+  layoutId,
+  tokens,
+  heroPhoto
+}: {
+  layoutId: string;
+  tokens: Tokens;
+  heroPhoto?: string;
+}) {
+  const slide = SAMPLE_SLIDES[layoutId];
+
+  if (!slide) {
+    return null;
+  }
+
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none aspect-video w-full overflow-hidden rounded-sm border bg-white"
+      style={{ borderColor: tok(tokens, "stone", "#D7CABF") }}
+    >
+      <LayoutBody
+        slide={slide}
+        plan={SAMPLE_PLAN}
+        tokens={tokens}
+        heroPhoto={heroPhoto}
+      />
+    </div>
   );
 }
 
