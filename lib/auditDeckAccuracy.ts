@@ -446,8 +446,38 @@ function checkFeatureFacts(
   ]);
   const rateExpected = contextRateExpectations(contextPack);
 
+  // The slide's stated top feature must never contradict the plotted data.
+  const consistencyChecks: ReturnType<typeof check>[] = [];
+  const measured = metrics
+    .map((metric) => ({
+      feature: String(metric.feature ?? ""),
+      count: toNumber(metric.count, Number.NaN)
+    }))
+    .filter((metric) => Number.isFinite(metric.count) && metric.count > 0);
+
+  if (measured.length > 1) {
+    const statedTop = String(slide.fields.top_feature ?? "");
+    const maxCount = Math.max(...measured.map((metric) => metric.count));
+    const leaders = measured
+      .filter((metric) => metric.count === maxCount)
+      .map((metric) => normalizedMetricKey(metric.feature));
+
+    consistencyChecks.push(
+      check(
+        "feature:top-feature-consistency",
+        "Top feature matches measured data",
+        statedTop === "" || leaders.includes(normalizedMetricKey(statedTop)),
+        statedTop === "" || leaders.includes(normalizedMetricKey(statedTop))
+          ? "Stated top feature agrees with the highest measured count."
+          : `Slide states "${statedTop}" as the top feature, but the measured leader is "${measured.find((metric) => metric.count === maxCount)?.feature}" (${maxCount}).`,
+        slide.title
+      )
+    );
+  }
+
   if (expected.size === 0) {
     return [
+      ...consistencyChecks,
       check(
         "feature:flexible-source",
         "Flexible feature metrics",
@@ -458,7 +488,7 @@ function checkFeatureFacts(
     ];
   }
 
-  return metrics.map((metric) => {
+  return [...consistencyChecks, ...metrics.map((metric) => {
     const feature = String(metric.feature ?? "");
     const key = normalizedMetricKey(feature);
     const expectedCount = expected.get(key);
@@ -495,7 +525,7 @@ function checkFeatureFacts(
       `Expected ${expectedCount}; deck plan has ${actual ?? "missing"}.`,
       slide.title
     );
-  });
+  })];
 }
 
 function checkSourceGrounding(

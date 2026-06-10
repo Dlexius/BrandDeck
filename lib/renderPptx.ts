@@ -6,21 +6,31 @@ import type { BrandContract, DeckPlan, DeckSlide } from "@/lib/deck-plan-schema"
 const SLIDE_W = 13.333;
 const SLIDE_H = 7.5;
 const PX = 1 / 144;
-const FONT_HEAD = "Inter Tight SemiBold";
-const FONT_BODY = "Inter";
-const FONT_MONO = "DM Mono Medium";
+
+// Typefaces come from the active brand contract so any uploaded brand renders
+// with its own approved fonts. These defaults only apply before a contract is
+// loaded.
+let FONT_HEAD = "Arial";
+let FONT_BODY = "Arial";
+let FONT_MONO = "Courier New";
+
+function applyContractFonts(contract: BrandContract) {
+  FONT_HEAD = contract.approved_fonts.heading[0] ?? "Arial";
+  FONT_BODY = contract.approved_fonts.body[0] ?? "Arial";
+  FONT_MONO = contract.approved_fonts.mono[0] ?? "Courier New";
+}
 
 type Deck = ReturnType<typeof createDeck>;
 type Slide = ReturnType<Deck["addSlide"]>;
 type ThemeMode = "light" | "warm" | "dark";
 
-function createDeck() {
+function createDeck(contract: BrandContract, plan: DeckPlan) {
   const pptx = new pptxgen();
   pptx.layout = "LAYOUT_WIDE";
-  pptx.author = "BrandDeck Studio";
-  pptx.company = "Procore Demo Brand";
-  pptx.subject = "Client adoption report";
-  pptx.title = "BrandDeck Studio Adoption Report";
+  pptx.author = contract.companyName;
+  pptx.company = contract.companyName;
+  pptx.subject = plan.deck_type ?? "Client report";
+  pptx.title = `${plan.client_name} | ${plan.report_period}`;
   pptx.theme = {
     headFontFace: FONT_HEAD,
     bodyFontFace: FONT_BODY
@@ -96,12 +106,13 @@ function addTemplateChrome(
   contract: BrandContract,
   pageNumber: number,
   section: string,
-  mode: ThemeMode = "light"
+  mode: ThemeMode = "light",
+  deckLabel = "CLIENT REPORT"
 ) {
   const isDark = mode === "dark";
   addBackground(pptx, slide, contract, mode);
 
-  slide.addText("CLIENT REPORT", {
+  slide.addText(deckLabel.toUpperCase(), {
     x: px(22.12),
     y: px(19.92),
     w: px(215.12),
@@ -135,7 +146,7 @@ function addTemplateChrome(
     y: px(1024.5),
     w: px(244.39),
     h: px(31.5),
-    altText: "Procore wordmark from approved template"
+    altText: `${contract.companyName} wordmark from the approved template`
   });
   slide.addText(String(pageNumber).padStart(2, "0"), {
     x: px(1782.67),
@@ -156,19 +167,50 @@ function addTitle(
   title: string,
   options: { x?: number; y?: number; w?: number; colorToken?: string } = {}
 ) {
+  // Taller box + shrink-to-fit so insight-headline titles (full-sentence
+  // takeaways, like the approved template examples) can wrap to two lines.
   slide.addText(title, {
     x: options.x ?? px(22.12),
-    y: options.y ?? px(119.32),
+    y: options.y ?? px(108),
     w: options.w ?? px(1332.76),
-    h: px(90),
+    h: px(132),
     margin: 0,
     fontFace: FONT_HEAD,
-    fontSize: 36,
+    fontSize: title.length > 44 ? 27 : 36,
     bold: true,
     breakLine: false,
     color: hex(contract, options.colorToken ?? "charcoal"),
     fit: "shrink"
   });
+}
+
+/**
+ * Split copy containing a single *emphasized phrase* into rich-text runs so
+ * the renderer can color the approved emphasis in the brand accent. Only the
+ * emphasis color is renderer-controlled; the phrase itself comes from the
+ * governed plan.
+ */
+function emphasisRuns(
+  value: string,
+  baseColor: string,
+  accentColor: string
+): Array<{ text: string; options: { color: string } }> {
+  const match = value.match(/\*([^*]+)\*/);
+  if (!match || match.index === undefined) {
+    return [{ text: value, options: { color: baseColor } }];
+  }
+
+  const before = value.slice(0, match.index);
+  const after = value.slice(match.index + match[0].length);
+  const runs: Array<{ text: string; options: { color: string } }> = [];
+  if (before) {
+    runs.push({ text: before, options: { color: baseColor } });
+  }
+  runs.push({ text: match[1], options: { color: accentColor } });
+  if (after) {
+    runs.push({ text: after, options: { color: baseColor } });
+  }
+  return runs;
 }
 
 function addBodyCopy(
@@ -179,7 +221,12 @@ function addBodyCopy(
   y: number,
   w: number,
   h: number,
-  options: { fontSize?: number; bold?: boolean; colorToken?: string } = {}
+  options: {
+    fontSize?: number;
+    bold?: boolean;
+    colorToken?: string;
+    valign?: "top" | "middle" | "bottom";
+  } = {}
 ) {
   slide.addText(value, {
     x,
@@ -192,7 +239,8 @@ function addBodyCopy(
     bold: options.bold,
     color: hex(contract, options.colorToken ?? "ink"),
     fit: "shrink",
-    breakLine: false
+    breakLine: false,
+    valign: options.valign ?? "top"
   });
 }
 
@@ -246,24 +294,27 @@ function addTrendSegment(
   from: { x: number; y: number },
   to: { x: number; y: number }
 ) {
-  const thickness = 0.03;
-  const midX = to.x;
-  const minY = Math.min(from.y, to.y);
-
-  addPositiveRect(pptx, slide, contract, {
+  // Direct point-to-point segment so the trend reads as a clean line chart
+  // instead of a stair-step.
+  slide.addShape(pptx.ShapeType.line, {
     x: from.x,
-    y: from.y - thickness / 2,
-    w: to.x - from.x,
-    h: thickness,
-    token: "primary_orange"
-  });
-  addPositiveRect(pptx, slide, contract, {
-    x: midX - thickness / 2,
-    y: minY,
-    w: thickness,
+    y: Math.min(from.y, to.y),
+    w: Math.max(to.x - from.x, 0.01),
     h: Math.abs(to.y - from.y),
-    token: "primary_orange"
+    flipV: to.y < from.y,
+    line: { color: hex(contract, "primary_orange"), width: 2.4 }
   });
+}
+
+/**
+ * X positions for a row of equal-width columns centered in the content band.
+ */
+function centeredColumnXs(count: number, columnW: number, gap: number) {
+  const contentLeft = px(22.12);
+  const contentRight = SLIDE_W - px(22.12);
+  const total = count * columnW + Math.max(count - 1, 0) * gap;
+  const start = contentLeft + Math.max((contentRight - contentLeft - total) / 2, 0);
+  return Array.from({ length: count }, (_, index) => start + index * (columnW + gap));
 }
 
 function renderTitleSlide(
@@ -288,7 +339,7 @@ function renderTitleSlide(
     y: px(75.45),
     w: px(788.81),
     h: px(971.89),
-    altText: "Approved Procore title texture"
+    altText: `${contract.companyName} approved title texture`
   });
   slide.addShape(pptx.ShapeType.hexagon, {
     x: px(1866.13),
@@ -305,9 +356,9 @@ function renderTitleSlide(
     w: px(762.79),
     h: px(445.92),
     sizing: { type: "cover", x: px(1135.09), y: px(601.42), w: px(762.79), h: px(445.92) },
-    altText: "Construction workers from approved Procore template"
+    altText: `${contract.companyName} approved template imagery`
   });
-  slide.addText("CLIENT ADOPTION REPORT", {
+  slide.addText(text(slideDef.fields.deck_label, "CLIENT REPORT").toUpperCase(), {
     x: px(22.12),
     y: px(18.23),
     w: px(300),
@@ -330,7 +381,9 @@ function renderTitleSlide(
     color: hex(contract, "charcoal"),
     fit: "shrink"
   });
-  slide.addText(`${slideDef.title}. ${text(slideDef.fields.subtitle)}`, {
+  // The plan subtitle is the single source for this line - no repeated title.
+  const subtitle = text(slideDef.fields.subtitle, slideDef.title);
+  slide.addText(subtitle, {
     x: px(21.99),
     y: px(402.55),
     w: px(799.28),
@@ -342,24 +395,32 @@ function renderTitleSlide(
     color: hex(contract, "charcoal"),
     fit: "shrink"
   });
-  slide.addText(text(slideDef.fields.report_period, plan.report_period), {
-    x: px(293.84),
-    y: px(689.17),
-    w: px(690.2),
-    h: px(73.54),
-    margin: 0,
-    fontFace: FONT_HEAD,
-    fontSize: 16,
-    bold: true,
-    color: hex(contract, "charcoal")
-  });
+  // Show the reporting period as a small label when the subtitle does not
+  // already carry it, so every title slide states the period exactly once.
+  const reportPeriod = text(slideDef.fields.report_period, plan.report_period);
+  if (
+    reportPeriod &&
+    !subtitle.toLowerCase().includes(reportPeriod.toLowerCase())
+  ) {
+    slide.addText(reportPeriod.toUpperCase(), {
+      x: px(21.99),
+      y: px(540),
+      w: px(500),
+      h: px(28),
+      margin: 0,
+      fontFace: FONT_MONO,
+      fontSize: 11,
+      bold: true,
+      color: hex(contract, "ink")
+    });
+  }
   slide.addImage({
     path: templateAsset(contract, "wordmark_black"),
     x: px(22.12),
     y: px(980.71),
     w: px(516.88),
     h: px(66.63),
-    altText: "Procore wordmark from approved template"
+    altText: `${contract.companyName} wordmark from the approved template`
   });
 }
 
@@ -375,11 +436,15 @@ function renderAgenda(
     y: px(448.87),
     w: px(815.23),
     h: px(631.13),
-    altText: "Approved Procore agenda texture"
+    altText: `${contract.companyName} approved agenda texture`
   });
   const items = arrayField<string>(slideDef.fields.agenda_items).slice(0, 6);
+  // Vertically center the agenda block so short agendas don't bunch at the top.
+  const itemSpacing = 128;
+  const blockHeight = (items.length - 1) * itemSpacing + 74;
+  const startY = Math.max(80, (1080 - blockHeight) / 2 - 40);
   items.forEach((item, index) => {
-    const y = px(80 + index * 128);
+    const y = px(startY + index * itemSpacing);
     slide.addText(String(index + 1).padStart(2, "0"), {
       x: px(763.29),
       y,
@@ -406,6 +471,44 @@ function renderAgenda(
   });
 }
 
+function renderStatement(
+  pptx: Deck,
+  slide: Slide,
+  contract: BrandContract,
+  slideDef: DeckSlide
+) {
+  // Bold framing statement on the dark background, mirroring the approved
+  // template's "Our goal for you today" slides. The emphasis phrase (marked
+  // with *asterisks* in the plan) renders in the brand accent color.
+  const statement = text(slideDef.fields.statement_text, slideDef.title);
+  const runs = emphasisRuns(
+    statement,
+    hex(contract, "white"),
+    hex(contract, "primary_orange")
+  );
+
+  slide.addText(
+    runs.map((run) => ({
+      text: run.text,
+      options: {
+        color: run.options.color,
+        fontFace: FONT_HEAD,
+        fontSize: 40,
+        bold: true
+      }
+    })),
+    {
+      x: px(292),
+      y: px(360),
+      w: px(1336),
+      h: px(420),
+      margin: 0,
+      valign: "top",
+      fit: "shrink"
+    }
+  );
+}
+
 function renderExecutiveSummary(
   slide: Slide,
   contract: BrandContract,
@@ -417,17 +520,31 @@ function renderExecutiveSummary(
     contract,
     text(slideDef.fields.business_impact),
     px(22.12),
-    px(228.7),
-    px(793.13),
-    px(160),
-    { fontSize: 13 }
+    px(240),
+    px(740),
+    px(420),
+    { fontSize: 18, bold: true, colorToken: "charcoal" }
   );
   const summaryPoints = arrayField<string>(slideDef.fields.summary_points);
+  // Distribute the points evenly through the content band so short lists do
+  // not bunch at the top of the slide.
+  const bandTop = px(240);
+  const bandBottom = px(980);
+  const blockH = px(150);
+  const spacing =
+    summaryPoints.length > 1
+      ? Math.min(
+          px(190),
+          (bandBottom - bandTop - blockH) / (summaryPoints.length - 1)
+        )
+      : 0;
+  const groupH = blockH + spacing * Math.max(summaryPoints.length - 1, 0);
+  const startY = bandTop + Math.max((bandBottom - bandTop - groupH) / 2, 0);
   summaryPoints.forEach((point, index) => {
     const x = px(838.13);
-    const y = px(230 + index * 170);
+    const y = startY + index * spacing;
     addLabel(slide, contract, `Point 0${index + 1}`, x, y);
-    addBodyCopy(slide, contract, point, x, y + 0.28, px(720), px(110), {
+    addBodyCopy(slide, contract, point, x, y + 0.26, px(720), px(96), {
       fontSize: 14,
       bold: true
     });
@@ -459,13 +576,35 @@ function renderScorecard(
     ["Active Projects", text(fields.projects_active), "Tracked projects", "project_management"],
     ["Mobile Usage", `${text(fields.mobile_usage_rate)}%`, "Field engagement", "mobile"]
   ];
-  const positions = [
-    [px(22.12), px(402), px(435.31), px(255)],
-    [px(488.72), px(402), px(435.31), px(255)],
-    [px(955.31), px(402), px(435.31), px(255)],
-    [px(22.12), px(704), px(435.31), px(230)],
-    [px(488.72), px(704), px(435.31), px(230)]
-  ];
+
+  // Count-aware grid: rows of up to three cards spread across the full
+  // content width, with partial rows centered so the slide stays balanced.
+  const contentLeft = px(22.12);
+  const contentRight = SLIDE_W - px(22.12);
+  const gap = px(31);
+  const perRow = 3;
+  const cardW = (contentRight - contentLeft - gap * (perRow - 1)) / perRow;
+  const cardH = px(265);
+  const rowGap = px(36);
+  const rowCount = Math.ceil(metrics.length / perRow);
+  const gridTop = px(402);
+
+  const positions = metrics.map((_, index) => {
+    const row = Math.floor(index / perRow);
+    const inRow = index % perRow;
+    const itemsInRow =
+      row === rowCount - 1 && metrics.length % perRow !== 0
+        ? metrics.length % perRow
+        : perRow;
+    const rowWidth = itemsInRow * cardW + (itemsInRow - 1) * gap;
+    const rowStart = contentLeft + (contentRight - contentLeft - rowWidth) / 2;
+    return [
+      rowStart + inRow * (cardW + gap),
+      gridTop + row * (cardH + rowGap),
+      cardW,
+      cardH
+    ];
+  });
 
   metrics.forEach(([label, value, context, iconKey], index) => {
     const [x, y, w, h] = positions[index];
@@ -483,7 +622,7 @@ function renderScorecard(
       y: y + 0.32,
       w: 0.34,
       h: 0.34,
-      altText: `${label} Procore template icon`
+      altText: `${label} approved template icon`
     });
     addLabel(slide, contract, label, x + 0.75, y + 0.35, {
       colorToken: "ink",
@@ -533,13 +672,16 @@ function renderUsageTrend(
   const chartW = px(1115);
   const chartH = px(456);
 
+  // Clean white plot area with brand-contract gridlines and readable labels.
+  const gridline = contract.chart_color_rules.neutral_gridline.replace("#", "");
+  const axisLabel = contract.chart_color_rules.axis_label.replace("#", "");
   slide.addShape(pptx.ShapeType.rect, {
     x: chartX,
     y: chartY,
     w: chartW,
     h: chartH,
-    fill: { color: hex(contract, "warm_sand") },
-    line: { color: hex(contract, "stone"), width: 0.35 }
+    fill: { color: hex(contract, "white") },
+    line: { color: gridline, width: 0.5 }
   });
   [0, 25, 50, 75, 100].forEach((value) => {
     const y = chartY + chartH - (value / 100) * chartH;
@@ -548,18 +690,18 @@ function renderUsageTrend(
       y,
       w: chartW,
       h: 0,
-      line: { color: hex(contract, "stone"), width: 0.35 }
+      line: { color: gridline, width: 0.5 }
     });
     slide.addText(String(value), {
-      x: chartX - 0.3,
-      y: y - 0.07,
-      w: 0.2,
-      h: 0.15,
+      x: chartX - 0.38,
+      y: y - 0.08,
+      w: 0.28,
+      h: 0.16,
       margin: 0,
       fontFace: FONT_BODY,
-      fontSize: 6.2,
+      fontSize: 8,
       align: "right",
-      color: hex(contract, "ink")
+      color: axisLabel
     });
   });
 
@@ -584,40 +726,59 @@ function renderUsageTrend(
       line: { color: hex(contract, "primary_orange") }
     });
     slide.addText(`${coord.score}`, {
-      x: coord.x - 0.18,
-      y: coord.y - 0.28,
-      w: 0.36,
-      h: 0.16,
+      x: coord.x - 0.22,
+      y: coord.y - 0.3,
+      w: 0.44,
+      h: 0.18,
       margin: 0,
       fontFace: FONT_HEAD,
-      fontSize: 7,
+      fontSize: 9,
       bold: true,
       align: "center",
       color: hex(contract, "charcoal")
     });
     slide.addText(coord.label, {
-      x: coord.x - 0.38,
+      x: coord.x - 0.5,
       y: chartY + chartH + 0.12,
-      w: 0.76,
-      h: 0.16,
+      w: 1.0,
+      h: 0.18,
       margin: 0,
       fontFace: FONT_BODY,
-      fontSize: 6,
+      fontSize: 7.5,
       align: "center",
-      color: hex(contract, "ink")
+      color: contract.chart_color_rules.axis_label.replace("#", "")
     });
   });
 
-  addBodyCopy(
-    slide,
-    contract,
-    "Adoption score trend generated from approved account metrics.",
-    px(1484.31),
-    px(507.09),
-    px(376.13),
-    px(201.98),
-    { fontSize: 15, colorToken: "primary_orange" }
-  );
+  // Deterministic, client-facing callout computed from the plotted data. The
+  // metric name comes from the plan so non-adoption trends label correctly.
+  if (points.length > 1) {
+    const metricLabel = text(slideDef.fields.trend_metric_label, "Adoption score");
+    const first = points[0];
+    const last = points[points.length - 1];
+    const delta = last.adoption_score - first.adoption_score;
+    const direction = delta >= 0 ? "+" : "";
+    addBodyCopy(
+      slide,
+      contract,
+      `${direction}${delta} pts since ${first.label}`,
+      px(1484.31),
+      px(507.09),
+      px(376.13),
+      px(120),
+      { fontSize: 22, bold: true, colorToken: "primary_orange" }
+    );
+    addBodyCopy(
+      slide,
+      contract,
+      `${metricLabel} reached ${last.adoption_score} in ${last.label}.`,
+      px(1484.31),
+      px(620),
+      px(376.13),
+      px(110),
+      { fontSize: 11 }
+    );
+  }
 }
 
 function renderFeatureAdoption(
@@ -642,8 +803,10 @@ function renderFeatureAdoption(
     slideDef.fields.feature_metrics
   );
   const max = Math.max(...metrics.map((metric) => metric.count), 1);
+  // Tighten row spacing as the list grows so bars and callouts never collide.
+  const rowSpacing = metrics.length > 3 ? 105 : 135;
   metrics.forEach((metric, index) => {
-    const y = px(410 + index * 135);
+    const y = px(410 + index * rowSpacing);
     const barW = px(880) * (metric.count / max);
     const iconKey =
       metric.feature === "RFIs"
@@ -657,7 +820,7 @@ function renderFeatureAdoption(
       y: y - 0.08,
       w: 0.24,
       h: 0.24,
-      altText: `${metric.feature} Procore template icon`
+      altText: `${metric.feature} approved template icon`
     });
     addBodyCopy(slide, contract, metric.feature, px(345), y, px(210), px(34), {
       fontSize: 9,
@@ -693,6 +856,12 @@ function renderFeatureAdoption(
     });
   });
 
+  // Place the callout cards below the last bar instead of at a fixed Y so
+  // longer metric lists can never overlap them.
+  const calloutY = Math.max(
+    px(790),
+    px(410 + metrics.length * rowSpacing + 20)
+  );
   const callouts = [
     ["Top feature", text(slideDef.fields.top_feature), "warm_sand"],
     ["Focus area", text(slideDef.fields.lowest_feature), "light_gray"]
@@ -701,14 +870,14 @@ function renderFeatureAdoption(
     const x = px(292 + index * 510);
     slide.addShape(pptx.ShapeType.rect, {
       x,
-      y: px(790),
+      y: calloutY,
       w: px(430),
       h: px(110),
       fill: { color: hex(contract, token) },
       line: { color: hex(contract, "stone"), width: 0.35 }
     });
-    addLabel(slide, contract, label, x + 0.24, px(815), { colorToken: "ink" });
-    addBodyCopy(slide, contract, value, x + 0.24, px(850), px(330), px(45), {
+    addLabel(slide, contract, label, x + 0.24, calloutY + 0.17, { colorToken: "ink" });
+    addBodyCopy(slide, contract, value, x + 0.24, calloutY + 0.42, px(330), px(45), {
       fontSize: 13,
       bold: true
     });
@@ -733,19 +902,20 @@ function renderRisks(
     { fontSize: 15, bold: true }
   );
   const recommendations = arrayField<string>(slideDef.fields.recommendations).slice(0, 3);
-  const cardXs = [px(23.46), px(566.89), px(1111.66)];
+  const columnXs = centeredColumnXs(recommendations.length, px(514.33), px(29));
+  const iconKeys = ["warning", "insights", "project_management"];
   recommendations.forEach((recommendation, index) => {
-    const x = cardXs[index];
+    const x = columnXs[index];
     slide.addImage({
-      path: templateIcon(contract, index === 0 ? "warning" : "insights"),
+      path: templateIcon(contract, iconKeys[index % iconKeys.length]),
       x,
-      y: px(377.07),
+      y: px(430),
       w: px(96),
       h: px(96),
-      altText: "Recommendation icon from approved Procore template"
+      altText: "Recommendation icon from the approved brand template"
     });
-    addLabel(slide, contract, `Point 0${index + 1}`, x, px(540));
-    addBodyCopy(slide, contract, recommendation, x, px(580.79), px(514.33), px(220), {
+    addLabel(slide, contract, `Point 0${index + 1}`, x, px(596));
+    addBodyCopy(slide, contract, recommendation, x, px(636), px(514.33), px(260), {
       fontSize: 13,
       bold: true
     });
@@ -758,32 +928,48 @@ function renderNextSteps(
   contract: BrandContract,
   slideDef: DeckSlide
 ) {
-  const isAppendix = slideDef.title.toLowerCase().includes("appendix");
+  const isAppendix =
+    slideDef.title.toLowerCase().includes("appendix") ||
+    slideDef.title.toLowerCase().includes("source");
   addTitle(slide, contract, slideDef.title, {
     w: isAppendix ? px(1500) : px(1066.52)
   });
   const steps = arrayField<string>(slideDef.fields.steps).slice(0, 3);
-  const cardXs = [px(22.12), px(565.55), px(1108.99)];
+  const cardW = px(518.05);
+  const cardH = isAppendix ? px(320) : px(420);
+  const cardY = isAppendix ? px(380) : px(420);
+  const cardXs = centeredColumnXs(steps.length, cardW, px(27));
   steps.forEach((step, index) => {
     const x = cardXs[index];
-    const y = isAppendix ? px(365) : px(402);
     slide.addShape(pptx.ShapeType.rect, {
       x,
-      y,
-      w: px(518.05),
-      h: isAppendix ? px(300) : px(494.02),
+      y: cardY,
+      w: cardW,
+      h: cardH,
       fill: { color: hex(contract, index === 0 ? "warm_sand" : "light_gray") },
       line: { color: hex(contract, "stone"), width: 0.35 }
     });
-    addLabel(slide, contract, String(index + 1).padStart(2, "0"), x + 0.33, y + 0.35);
-    addBodyCopy(slide, contract, step, x + 0.33, y + 0.82, px(423.43), isAppendix ? px(140) : px(238), {
-      fontSize: 13.5,
-      bold: true
-    });
+    addLabel(slide, contract, String(index + 1).padStart(2, "0"), x + 0.33, cardY + 0.33);
+    // Vertically centered within the card so copy never floats in dead space.
+    addBodyCopy(
+      slide,
+      contract,
+      step,
+      x + 0.33,
+      cardY + 0.62,
+      cardW - 0.66,
+      cardH - 0.95,
+      {
+        fontSize: 13.5,
+        bold: true,
+        valign: "middle"
+      }
+    );
   });
   if (slideDef.fields.note) {
-    addBodyCopy(slide, contract, text(slideDef.fields.note), px(22.12), px(900), px(1200), px(70), {
-      fontSize: 9,
+    const noteY = cardY + cardH + 0.22;
+    addBodyCopy(slide, contract, text(slideDef.fields.note), px(22.12), noteY, px(1500), px(50), {
+      fontSize: 9.5,
       colorToken: "medium_gray"
     });
   }
@@ -802,19 +988,27 @@ function renderSlide(
     return;
   }
 
-  const dark = slideDef.layout_id === "agenda";
+  const dark =
+    slideDef.layout_id === "agenda" || slideDef.layout_id === "statement";
+  // The section kicker mirrors the slide's actual title so an appendix slide
+  // reusing a layout never inherits the wrong label (e.g. "NEXT STEPS" on a
+  // Source Notes slide).
   addTemplateChrome(
     pptx,
     slide,
     contract,
     pageNumber,
-    slideDef.layout_id.replaceAll("_", " "),
-    dark ? "dark" : "light"
+    slideDef.title.slice(0, 36),
+    dark ? "dark" : "light",
+    text(slideDef.fields.deck_label, "CLIENT REPORT")
   );
 
   switch (slideDef.layout_id) {
     case "agenda":
       renderAgenda(pptx, slide, contract, slideDef);
+      break;
+    case "statement":
+      renderStatement(pptx, slide, contract, slideDef);
       break;
     case "executive_summary":
       renderExecutiveSummary(slide, contract, slideDef);
@@ -904,7 +1098,8 @@ export async function renderPptx(
   deckPlan: DeckPlan,
   brandContract: BrandContract
 ): Promise<Buffer> {
-  const pptx = createDeck();
+  applyContractFonts(brandContract);
+  const pptx = createDeck(brandContract, deckPlan);
 
   deckPlan.slides.forEach((slideDef, index) => {
     const slide = pptx.addSlide();

@@ -30,6 +30,7 @@
       "slide_sequence": [
         { "slide_role": "title", "layout_id": "title_client_report", "title": "Executive Adoption Update", "content_focus": "Client, period, and executive update context.", "template_variant_key": "cover_split" },
         { "slide_role": "agenda", "layout_id": "agenda", "title": "Leadership Discussion", "content_focus": "Adoption health, trend, risk, and decisions." },
+        { "slide_role": "statement", "layout_id": "statement", "title": "Our goal for you today", "content_focus": "Keep {client}'s adoption momentum working as *a system, not a one-time push*." },
         { "slide_role": "executive_summary", "layout_id": "executive_summary", "title": "Executive Readout", "content_focus": "Decision-ready adoption narrative.", "template_variant_key": "summary_list_2col" },
         { "slide_role": "kpi_scorecard", "layout_id": "adoption_kpi_scorecard", "title": "Adoption Health", "content_focus": "Current KPI health and licensed user coverage.", "template_variant_key": "kpi_point_summary" },
         { "slide_role": "usage_trend", "layout_id": "usage_trend", "title": "Momentum Trend", "content_focus": "Adoption and active-user trajectory.", "template_variant_key": "trend_stacked_chart" },
@@ -48,6 +49,7 @@
       "slide_sequence": [
         { "slide_role": "title", "layout_id": "title_client_report", "title": "Adoption Risk Remediation Plan", "content_focus": "Client, period, and remediation context.", "template_variant_key": "cover_image_band" },
         { "slide_role": "agenda", "layout_id": "agenda", "title": "Remediation Flow", "content_focus": "Risk, root signals, recommendations, and operating cadence." },
+        { "slide_role": "statement", "layout_id": "statement", "title": "Our goal for you today", "content_focus": "Enable {client}'s teams to be *smoke detectors, not firefighters*." },
         { "slide_role": "executive_summary", "layout_id": "executive_summary", "title": "Risk Summary", "content_focus": "Current risk and business implication.", "template_variant_key": "summary_list_2col" },
         { "slide_role": "risks_recommendations", "layout_id": "risks_recommendations", "title": "Priority Risks & Recommendations", "content_focus": "Risks paired with actions.", "template_variant_key": "risk_actions_3up_alt" },
         { "slide_role": "kpi_scorecard", "layout_id": "adoption_kpi_scorecard", "title": "Health Signals", "content_focus": "KPI evidence for remediation focus.", "template_variant_key": "kpi_category_summary" },
@@ -66,6 +68,7 @@
       "slide_sequence": [
         { "slide_role": "title", "layout_id": "title_client_report", "title": "Quarterly Business Review", "content_focus": "Client, quarter, and executive review context.", "template_variant_key": "cover_split" },
         { "slide_role": "agenda", "layout_id": "agenda", "title": "QBR Flow", "content_focus": "Value story, adoption health, product usage, risks, and next-quarter priorities." },
+        { "slide_role": "statement", "layout_id": "statement", "title": "Our goal for you today", "content_focus": "Turn {client}'s operating data into *decisions that protect schedule and budget*." },
         { "slide_role": "executive_summary", "layout_id": "executive_summary", "title": "Executive Value Readout", "content_focus": "Quarterly value delivered and decisions needed.", "template_variant_key": "summary_list_2col" },
         { "slide_role": "kpi_scorecard", "layout_id": "adoption_kpi_scorecard", "title": "Quarterly Health Signals", "content_focus": "Current KPI health, licensed coverage, projects, and mobile usage.", "template_variant_key": "kpi_category_summary" },
         { "slide_role": "usage_trend", "layout_id": "usage_trend", "title": "Adoption Momentum", "content_focus": "Adoption score and active user movement across the quarter.", "template_variant_key": "trend_stacked_chart" },

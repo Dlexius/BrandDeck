@@ -33,12 +33,13 @@ const FILLER_COPY: Record<string, string> = {
 const TITLE_LIMITS: Record<DeckSlide["layout_id"], number> = {
   title_client_report: 64,
   agenda: 48,
-  executive_summary: 24,
-  adoption_kpi_scorecard: 54,
-  usage_trend: 12,
-  feature_adoption: 56,
-  risks_recommendations: 56,
-  next_steps: 48
+  statement: 40,
+  executive_summary: 72,
+  adoption_kpi_scorecard: 80,
+  usage_trend: 80,
+  feature_adoption: 80,
+  risks_recommendations: 72,
+  next_steps: 64
 };
 
 function compactTitle(title: string, suffix: string, maxLength: number) {

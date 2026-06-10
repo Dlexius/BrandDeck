@@ -27,6 +27,7 @@ import {
   X
 } from "lucide-react";
 import brandContractData from "@/data/brand-contract.json";
+import { DeckPreview } from "@/components/deck-preview";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -548,8 +549,175 @@ type GeneratePlanApiResponse = {
     model: string;
     status: "passed";
   }>;
+  followUpQuestions?: string[];
   error?: string;
+  errorDetails?: string;
 };
+
+const GENERATION_STAGES = [
+  "Reading your brief",
+  "Analyzing the selected context",
+  "Planning the slide sequence",
+  "Writing grounded slide copy",
+  "Checking brand fit and accuracy",
+  "Running the final brand review"
+];
+
+function GenerationProgress() {
+  const [stageIndex, setStageIndex] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setStageIndex((value) =>
+        Math.min(value + 1, GENERATION_STAGES.length - 1)
+      );
+    }, 7000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="workflow-step-panel rounded-md border border-[#E5E0DB] bg-white px-4 py-3">
+      <div className="flex items-center gap-2.5">
+        <Loader2 className="h-4 w-4 animate-spin text-brand-orange" />
+        <p
+          key={stageIndex}
+          className="workflow-soft-raise text-sm font-semibold text-brand-ink"
+        >
+          {GENERATION_STAGES[stageIndex]}…
+        </p>
+      </div>
+      <div className="mt-3 h-1 overflow-hidden rounded-full bg-[#F3F3F3]">
+        <div
+          className="h-full rounded-full bg-brand-orange transition-all duration-[7000ms] ease-linear"
+          style={{
+            width: `${((stageIndex + 1) / GENERATION_STAGES.length) * 100}%`
+          }}
+        />
+      </div>
+      <p className="mt-2 text-xs font-medium text-[#787E89]">
+        Brand rules stay locked while the deck is planned and reviewed.
+      </p>
+    </div>
+  );
+}
+
+function FollowUpQuestions({
+  questions,
+  busy,
+  onApply
+}: {
+  questions: string[];
+  busy: boolean;
+  onApply: (answers: Array<{ question: string; answer: string }>) => void;
+}) {
+  const [answers, setAnswers] = useState<Record<number, string>>({});
+  const answered = questions
+    .map((question, index) => ({
+      question,
+      answer: (answers[index] ?? "").trim()
+    }))
+    .filter((item) => item.answer.length > 0);
+
+  return (
+    <section className="workflow-soft-raise rounded-lg border border-[#E5E0DB] bg-white">
+      <header className="px-5 pt-4">
+        <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
+          Make It Sharper
+        </h2>
+        <p className="mt-1 text-sm text-[#787E89]">
+          BrandDeck generated your deck, and these optional details would make
+          the next pass stronger.
+        </p>
+      </header>
+      <div className="space-y-3 px-5 py-4">
+        {questions.map((question, index) => (
+          <div key={index}>
+            <label className="mb-1 block text-sm font-semibold text-brand-ink">
+              {question}
+            </label>
+            <input
+              type="text"
+              value={answers[index] ?? ""}
+              maxLength={200}
+              onChange={(event) =>
+                setAnswers((current) => ({
+                  ...current,
+                  [index]: event.target.value
+                }))
+              }
+              placeholder="Optional - answer in one line"
+              className="h-10 w-full rounded-md border border-[#D7CABF] bg-white px-3 text-sm text-brand-charcoal outline-none transition-colors placeholder:text-[#B7B0A8] focus:border-brand-orange"
+            />
+          </div>
+        ))}
+      </div>
+      <footer className="flex items-center justify-between border-t border-[#F0EBE6] px-5 py-3">
+        <p className="text-xs font-medium text-[#787E89]">
+          Answers are added to your brief; the brand system stays locked.
+        </p>
+        <Button
+          variant="secondary"
+          disabled={answered.length === 0 || busy}
+          onClick={() => onApply(answered)}
+        >
+          <Sparkles className="h-4 w-4" />
+          Add details & regenerate
+        </Button>
+      </footer>
+    </section>
+  );
+}
+
+function WorkflowNotice({
+  message,
+  details,
+  tone
+}: {
+  message: string;
+  details?: string;
+  tone: "info" | "error";
+}) {
+  const [showDetails, setShowDetails] = useState(false);
+  const isError = tone === "error";
+
+  return (
+    <div
+      role={isError ? "alert" : "status"}
+      className={`workflow-step-panel rounded-md border px-4 py-3 text-sm font-semibold ${
+        isError
+          ? "border-[#F4C2A8] bg-[#FFF7F2] text-brand-charcoal"
+          : "border-[#D7CABF] bg-white text-brand-ink"
+      }`}
+    >
+      <div className="flex items-start gap-2.5">
+        {isError ? (
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-brand-orange" />
+        ) : (
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#1E8E3E]" />
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="leading-6">{message}</p>
+          {details ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowDetails((value) => !value)}
+                className="mt-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-[#787E89] transition-colors hover:text-brand-charcoal"
+              >
+                {showDetails ? "Hide details" : "Show details"}
+              </button>
+              {showDetails ? (
+                <p className="mt-2 max-h-44 overflow-y-auto whitespace-pre-wrap rounded-sm bg-white/70 p-2 text-xs font-medium leading-5 text-[#787E89]">
+                  {details}
+                </p>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function cleanSnapshotValue(value: string) {
   return value.replace(/\s+/g, " ").trim();
@@ -950,7 +1118,7 @@ function ExportQualityPanel({
         ? brandPreflight
           ? `${brandPreflight.readinessScore}% export readiness`
           : "Waiting for template checks"
-        : "Coordinate renderer ready"
+        : "Built-in brand layouts ready"
     },
     {
       label: "Template fit",
@@ -1292,10 +1460,10 @@ function CreatorBrandPanel({
   const brandLogoSrc = logoAsset
     ? `/api/brand-assets?id=${encodeURIComponent(logoAsset.id)}`
     : brandContract.template_assets?.wordmark_black;
-  const readiness = templateKit ? "Template kit active" : "Brand contract active";
+  const readiness = templateKit ? "Template active" : "Brand styles active";
   const bindingMode = templateKit
-    ? "Clone/edit renderer"
-    : "Coordinate renderer";
+    ? "Exports reuse your uploaded template"
+    : "Exports use built-in brand layouts";
 
   return (
     <aside className="overflow-y-auto border-r border-[#E5E0DB] bg-white p-6">
@@ -2472,8 +2640,10 @@ function BrandContractPanel({
   brandAssets,
   templateUploading,
   assetUploading,
+  adoptingIdentity,
   onTemplateUpload,
-  onAssetUpload
+  onAssetUpload,
+  onAdoptTemplateIdentity
 }: {
   brandContract: BrandContract;
   templateFileName: string;
@@ -2482,8 +2652,10 @@ function BrandContractPanel({
   brandAssets: BrandAssetSummary[];
   templateUploading: boolean;
   assetUploading: boolean;
+  adoptingIdentity: boolean;
   onTemplateUpload: (file: File | null) => void;
   onAssetUpload: (files: FileList | null) => void;
+  onAdoptTemplateIdentity: () => void;
 }) {
   const colors = Object.entries(brandContract.approved_color_tokens).slice(0, 7);
   const approvedColorSet = new Set(
@@ -2627,6 +2799,19 @@ function BrandContractPanel({
                   {templateKit.detectedFonts.slice(0, 4).join(", ") || "None detected"}
                 </p>
               </div>
+              <Button
+                variant="secondary"
+                className="w-full"
+                disabled={adoptingIdentity}
+                onClick={onAdoptTemplateIdentity}
+              >
+                {adoptingIdentity ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ShieldCheck className="h-4 w-4" />
+                )}
+                Adopt this template's brand identity
+              </Button>
               <div>
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.08em] text-[#787E89]">
                   <Palette className="h-3.5 w-3.5 text-brand-orange" />
@@ -2992,8 +3177,8 @@ function BrandColorSettingsPanel({
               className="mt-4 rounded-md bg-white px-3 py-2 text-xs font-semibold leading-5"
               style={{ border: `1px solid ${previewStone}`, color: previewInk }}
             >
-              Template-based exports inherit uploaded template artwork.
-              Coordinate exports use the active token values.
+              Decks built from an uploaded template inherit its artwork.
+              Otherwise exports use these brand colors directly.
             </div>
           </div>
         </div>
@@ -3088,71 +3273,6 @@ function SettingsSectionNav({
         );
       })}
     </nav>
-  );
-}
-
-function DeckOutline({ deckPlan }: { deckPlan: DeckPlan | null }) {
-  const plannedSlides = deckPlan?.slides ?? [];
-
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div>
-          <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
-            Deck Outline
-          </h2>
-          <p className="mt-1 text-sm text-[#787E89]">
-            {deckPlan
-              ? `${plannedSlides.length} slides generated`
-              : "Awaiting generated deck"}
-          </p>
-        </div>
-        {deckPlan && (
-          <div className="flex flex-wrap justify-end gap-2">
-            {deckPlan.source_pack && (
-              <span className="rounded-sm bg-[#FFF1E8] px-2 py-1 text-xs font-black uppercase tracking-[0.08em] text-[#6B2A00]">
-                {deckPlan.source_pack.document_count} source
-                {deckPlan.source_pack.document_count === 1 ? "" : "s"}
-              </span>
-            )}
-            <span className="rounded-sm bg-[#F3F3F3] px-2 py-1 font-mono text-xs font-semibold text-brand-ink">
-              {deckPlan.deck_type}
-            </span>
-          </div>
-        )}
-      </CardHeader>
-      <CardContent className="p-0">
-        {plannedSlides.length === 0 ? (
-          <div className="px-5 py-10 text-center text-sm font-medium text-[#787E89]">
-            Generate a plan to preview approved layouts.
-          </div>
-        ) : (
-          <div className="overflow-hidden">
-            {plannedSlides.map((slide, index) => (
-              <div
-                key={`${slide.layout_id}-${index}`}
-                className="grid grid-cols-[40px_minmax(0,1fr)] items-center border-b border-[#EFEAE5] px-4 py-3 last:border-b-0 md:grid-cols-[48px_minmax(0,1fr)_240px]"
-              >
-                <span className="font-mono text-xs font-semibold text-[#787E89]">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-bold text-brand-charcoal">
-                    {slide.title}
-                  </p>
-                  <p className="mt-1 text-xs font-semibold text-[#787E89]">
-                    Approved template layout
-                  </p>
-                </div>
-                <span className="col-start-2 mt-2 truncate rounded-sm bg-[#F3F3F3] px-2 py-1 font-mono text-xs font-semibold text-brand-ink md:col-start-auto md:mt-0">
-                  {slide.layout_id}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 
@@ -4667,6 +4787,8 @@ export default function Home() {
     string[]
   >([]);
   const [deckPlan, setDeckPlan] = useState<DeckPlan | null>(null);
+  const [followUpQuestions, setFollowUpQuestions] = useState<string[]>([]);
+  const [adoptingIdentity, setAdoptingIdentity] = useState(false);
   const [validationReport, setValidationReport] =
     useState<ValidationReport | null>(null);
   const [accuracyAudit, setAccuracyAudit] =
@@ -4692,7 +4814,20 @@ export default function Home() {
   const [templateUploading, setTemplateUploading] = useState(false);
   const [assetUploading, setAssetUploading] = useState(false);
   const [updatingAssetId, setUpdatingAssetId] = useState("");
-  const [notice, setNotice] = useState("");
+  const [notice, setNoticeText] = useState("");
+  const [noticeTone, setNoticeTone] = useState<"info" | "error">("info");
+  const [noticeDetails, setNoticeDetails] = useState("");
+
+  // Single entry point for workflow notices. Plain calls reset tone/details so
+  // an earlier error style never leaks into a later informational message.
+  function setNotice(
+    message: string,
+    options: { tone?: "info" | "error"; details?: string } = {}
+  ) {
+    setNoticeText(message);
+    setNoticeTone(options.tone ?? "info");
+    setNoticeDetails(options.details ?? "");
+  }
   const [ingestingSources, setIngestingSources] = useState(false);
   const [searchingGoogleDrive, setSearchingGoogleDrive] = useState(false);
   const [importingGoogleDrive, setImportingGoogleDrive] = useState(false);
@@ -5090,6 +5225,69 @@ export default function Home() {
       EXAMPLE_BUSINESS_SNAPSHOT,
       "Example account snapshot loaded. Update any metric or context before generating."
     );
+  }
+
+  async function handleAdoptTemplateIdentity() {
+    if (!templateKit) {
+      setNotice("Upload a template first, then adopt its brand identity.");
+      return;
+    }
+
+    setAdoptingIdentity(true);
+    try {
+      const response = await fetch("/api/brand-intake", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templateKitId: templateKit.id, apply: true })
+      });
+      const result = (await response.json()) as BrandContractApiResponse & {
+        draft?: { companyName?: string };
+        error?: string;
+      };
+
+      if (!response.ok || !result.brandContract) {
+        throw new Error(result.error ?? "Unable to adopt the template identity.");
+      }
+
+      applyBrandContractResponse(result);
+      setNotice(
+        `Brand identity updated from the template: ${result.draft?.companyName ?? result.brandContract.companyName} with its detected fonts. Review colors below, then generate.`
+      );
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "Unable to adopt the template identity.",
+        { tone: "error" }
+      );
+    } finally {
+      setAdoptingIdentity(false);
+    }
+  }
+
+  function handleApplyFollowUpAnswers(
+    answers: Array<{ question: string; answer: string }>
+  ) {
+    const additions = answers
+      .map(({ question, answer }) => `${question} ${answer}`)
+      .join(" ");
+    const nextPrompt = `${prompt.trim()}\n\nAdded details: ${additions}`.slice(
+      0,
+      1000
+    );
+    setPrompt(nextPrompt);
+    setFollowUpQuestions([]);
+    void handleGenerate(nextPrompt);
+  }
+
+  function handleLoadExampleBrief() {
+    setPrompt(DEFAULT_PROMPT);
+    setSelectedRecipeId("auto");
+    applyBusinessSnapshot(
+      EXAMPLE_BUSINESS_SNAPSHOT,
+      "Example brief and account data loaded. Review the context, then generate."
+    );
+    setActiveCreatorStep("context");
   }
 
   function handleSelectClientProfile(profileId: string) {
@@ -5730,7 +5928,7 @@ export default function Home() {
     ] satisfies SourceDocument[];
   }
 
-  async function buildValidatedDeckPlan() {
+  async function buildValidatedDeckPlan(promptText: string) {
     const rows = csvRows;
     const sourcePack = buildSourcePack();
     const contextPack = buildContextPackFromInputs({
@@ -5775,7 +5973,7 @@ export default function Home() {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        prompt,
+        prompt: promptText,
         csvRows: rows,
         contextPack,
         recipeId: selectedRecipeId === "auto" ? undefined : selectedRecipeId,
@@ -5792,7 +5990,11 @@ export default function Home() {
       !result.accuracyAudit ||
       !result.fitAudit
     ) {
-      throw new Error(result.error ?? "Unable to generate a governed deck.");
+      const failure = new Error(
+        result.error ?? "Unable to generate a governed deck."
+      ) as Error & { details?: string };
+      failure.details = result.errorDetails;
+      throw failure;
     }
 
     const plan = result.deckPlan;
@@ -5806,6 +6008,7 @@ export default function Home() {
     setAccuracyAudit(accuracy);
     setFitAudit(fit);
     setExportCertificate(null);
+    setFollowUpQuestions((result.followUpQuestions ?? []).slice(0, 4));
 
     if (templateKit) {
       await refreshTemplateGovernance(templateKit.id, plan);
@@ -5955,7 +6158,10 @@ export default function Home() {
     return `${plannerPrefix}Deck generated and ready to export: ${certificate.referencedSlides} slides, ${certificate.placeholderHits} placeholder hits, ${certificate.brandValidationScore} brand validation.`;
   }
 
-  async function handleGenerate() {
+  async function handleGenerate(promptOverride?: unknown) {
+    // Guard: onClick passes the click event; only honor real string overrides.
+    const promptText =
+      typeof promptOverride === "string" ? promptOverride : prompt;
     setActiveCreatorStep("export");
     setGenerating(true);
     setPreparingExport(true);
@@ -5963,16 +6169,37 @@ export default function Home() {
     setNotice("");
 
     try {
-      const generation = await buildValidatedDeckPlan();
+      const generation = await buildValidatedDeckPlan(promptText);
       const message = await prepareGeneratedDeckForExport(generation);
       setNotice(message);
     } catch (error) {
       setDeckPlan(null);
+      setFollowUpQuestions([]);
       setValidationReport(null);
       setAccuracyAudit(null);
       setFitAudit(null);
       setExportCertificate(null);
-      setNotice(error instanceof Error ? error.message : "Unable to generate deck.");
+
+      // Keep the visible message short and human; move any long or technical
+      // text into the collapsible details section.
+      const rawMessage =
+        error instanceof Error ? error.message : "Unable to generate deck.";
+      const serverDetails =
+        error instanceof Error
+          ? ((error as Error & { details?: string }).details ?? "")
+          : "";
+      const isWordy = rawMessage.length > 200;
+      setNotice(
+        isWordy
+          ? "BrandDeck's automated review stopped this draft before export. Generating again usually resolves it - each pass replans the deck."
+          : rawMessage,
+        {
+          tone: "error",
+          details: [isWordy ? rawMessage : "", serverDetails]
+            .filter(Boolean)
+            .join("\n\n")
+        }
+      );
     } finally {
       setAuditingExport(false);
       setPreparingExport(false);
@@ -6084,7 +6311,15 @@ export default function Home() {
           : "PPTX exported."
       );
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Unable to export PPTX.");
+      const rawMessage =
+        error instanceof Error ? error.message : "Unable to export PPTX.";
+      const isWordy = rawMessage.length > 200;
+      setNotice(
+        isWordy
+          ? "The export was stopped by a brand check before any file was created. Try exporting again, or regenerate the deck."
+          : rawMessage,
+        { tone: "error", details: isWordy ? rawMessage : "" }
+      );
     } finally {
       setExporting(false);
     }
@@ -6437,10 +6672,6 @@ export default function Home() {
             ))}
           </nav>
         </div>
-        <div className="flex items-center gap-3 text-xs font-bold uppercase tracking-[0.08em] text-white">
-          <span className="h-1.5 w-1.5 rounded-full bg-brand-orange" />
-          Brand Governed
-        </div>
       </header>
 
       <div
@@ -6461,8 +6692,10 @@ export default function Home() {
             brandAssets={brandAssets}
             templateUploading={templateUploading}
             assetUploading={assetUploading}
+            adoptingIdentity={adoptingIdentity}
             onTemplateUpload={handleTemplateUpload}
             onAssetUpload={handleAssetUpload}
+            onAdoptTemplateIdentity={handleAdoptTemplateIdentity}
           />
         )}
 
@@ -6645,9 +6878,11 @@ export default function Home() {
                 />
 
                 {notice && activeCreatorStep !== "export" && (
-                  <div className="rounded-md border border-[#D7CABF] bg-white px-4 py-3 text-sm font-semibold text-brand-ink">
-                    {notice}
-                  </div>
+                  <WorkflowNotice
+                    message={notice}
+                    details={noticeDetails}
+                    tone={noticeTone}
+                  />
                 )}
 
                 {activeCreatorStep === "brief" && (
@@ -6691,13 +6926,21 @@ export default function Home() {
                             </span>
                             Brand system stays locked
                           </div>
-                          <Button
-                            onClick={() => setActiveCreatorStep("context")}
-                            disabled={!promptReady}
-                          >
-                            Continue to Context
-                            <ArrowRight className="h-4 w-4" />
-                          </Button>
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                            <Button
+                              variant="secondary"
+                              onClick={handleLoadExampleBrief}
+                            >
+                              Try the example
+                            </Button>
+                            <Button
+                              onClick={() => setActiveCreatorStep("context")}
+                              disabled={!promptReady}
+                            >
+                              Continue to Context
+                              <ArrowRight className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -6871,22 +7114,46 @@ export default function Home() {
                       </CardContent>
                     </Card>
 
-                    {notice && (
-                      <div className="rounded-md border border-[#D7CABF] bg-white px-4 py-3 text-sm font-semibold text-brand-ink">
-                        {notice}
-                      </div>
+                    {(generating || preparingExport || auditingExport) && (
+                      <GenerationProgress />
                     )}
 
-                    {deckPlan && <DeckOutline deckPlan={deckPlan} />}
+                    {notice &&
+                      !(generating || preparingExport || auditingExport) && (
+                        <WorkflowNotice
+                          message={notice}
+                          details={noticeDetails}
+                          tone={noticeTone}
+                        />
+                      )}
+
+                    {deckPlan &&
+                      followUpQuestions.length > 0 &&
+                      !(generating || preparingExport || auditingExport) && (
+                        <FollowUpQuestions
+                          questions={followUpQuestions}
+                          busy={generating || preparingExport}
+                          onApply={handleApplyFollowUpAnswers}
+                        />
+                      )}
+
+                    {deckPlan && (
+                      <DeckPreview
+                        deckPlan={deckPlan}
+                        brandContract={activeBrandContract}
+                      />
+                    )}
                   </div>
                 )}
               </>
             )}
 
             {workspaceView === "settings" && notice && (
-              <div className="rounded-md border border-[#D7CABF] bg-white px-4 py-3 text-sm font-semibold text-brand-ink">
-                {notice}
-              </div>
+              <WorkflowNotice
+                message={notice}
+                details={noticeDetails}
+                tone={noticeTone}
+              />
             )}
           </div>
         </section>

@@ -20,6 +20,34 @@
       "reporting": "/brand-assets/procore-template/icon-reporting.png",
       "rfi": "/brand-assets/procore-template/icon-rfi.png",
       "warning": "/brand-assets/procore-template/icon-warning.png"
+    },
+    "embedded_fonts": {
+      "Inter Tight SemiBold": {
+        "regular": "/brand-assets/procore-template/fonts/InterTightSemiBold-regular.fntdata",
+        "bold": "/brand-assets/procore-template/fonts/InterTightSemiBold-bold.fntdata",
+        "italic": "/brand-assets/procore-template/fonts/InterTightSemiBold-italic.fntdata",
+        "boldItalic": "/brand-assets/procore-template/fonts/InterTightSemiBold-boldItalic.fntdata"
+      },
+      "Inter Tight": {
+        "regular": "/brand-assets/procore-template/fonts/InterTight-regular.fntdata",
+        "bold": "/brand-assets/procore-template/fonts/InterTight-bold.fntdata",
+        "italic": "/brand-assets/procore-template/fonts/InterTight-italic.fntdata",
+        "boldItalic": "/brand-assets/procore-template/fonts/InterTight-boldItalic.fntdata"
+      },
+      "Inter": {
+        "regular": "/brand-assets/procore-template/fonts/Inter-regular.fntdata",
+        "bold": "/brand-assets/procore-template/fonts/Inter-bold.fntdata",
+        "italic": "/brand-assets/procore-template/fonts/Inter-italic.fntdata",
+        "boldItalic": "/brand-assets/procore-template/fonts/Inter-boldItalic.fntdata"
+      },
+      "DM Mono Medium": {
+        "regular": "/brand-assets/procore-template/fonts/DMMonoMedium-regular.fntdata",
+        "italic": "/brand-assets/procore-template/fonts/DMMonoMedium-italic.fntdata"
+      },
+      "DM Mono": {
+        "regular": "/brand-assets/procore-template/fonts/DMMono-regular.fntdata",
+        "italic": "/brand-assets/procore-template/fonts/DMMono-italic.fntdata"
+      }
     }
   },
   "approved_fonts": {
@@ -93,14 +121,26 @@
       "approved_chart_types": []
     },
     {
+      "layout_id": "statement",
+      "name": "Statement",
+      "purpose": "Bold framing statement that sets the meeting goal or key message, with an approved emphasis phrase.",
+      "required_placeholders": ["statement_text"],
+      "max_text_lengths": {
+        "title": 40,
+        "statement_text": 180,
+        "statement_emphasis": 60
+      },
+      "approved_chart_types": []
+    },
+    {
       "layout_id": "executive_summary",
       "name": "Executive Summary",
       "purpose": "Summarizes adoption health, business impact, and decisions needed.",
       "required_placeholders": ["summary_points", "business_impact"],
       "max_text_lengths": {
-        "title": 24,
+        "title": 72,
         "summary_points": 42,
-        "business_impact": 78
+        "business_impact": 110
       },
       "approved_chart_types": []
     },
@@ -116,7 +156,7 @@
         "mobile_usage_rate"
       ],
       "max_text_lengths": {
-        "title": 54,
+        "title": 80,
         "metric_label": 28,
         "metric_value": 18,
         "metric_context": 76
@@ -129,8 +169,9 @@
       "purpose": "Shows adoption score and active user trend across report periods.",
       "required_placeholders": ["chart_type", "trend_points", "trend_summary"],
       "max_text_lengths": {
-        "title": 12,
-        "trend_summary": 72,
+        "title": 80,
+        "trend_summary": 90,
+        "trend_metric_label": 40,
         "label": 24
       },
       "approved_chart_types": ["line"]
@@ -146,7 +187,7 @@
         "lowest_feature"
       ],
       "max_text_lengths": {
-        "title": 56,
+        "title": 80,
         "top_feature": 48,
         "lowest_feature": 48,
         "feature_label": 32
@@ -159,7 +200,7 @@
       "purpose": "Links adoption risks to practical recommendations.",
       "required_placeholders": ["risk_summary", "recommendations"],
       "max_text_lengths": {
-        "title": 56,
+        "title": 72,
         "risk_summary": 190,
         "recommendations": 150
       },
@@ -171,7 +212,7 @@
       "purpose": "Closes the report with action owners, milestones, or source notes.",
       "required_placeholders": ["steps"],
       "max_text_lengths": {
-        "title": 48,
+        "title": 64,
         "steps": 140,
         "note": 160
       },

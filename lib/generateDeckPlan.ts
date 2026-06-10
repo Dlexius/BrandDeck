@@ -374,7 +374,9 @@ function agendaItemsForRecipe(recipe: DeckRecipe) {
   return recipe.slide_sequence
     .filter(
       (slide) =>
-        !["title", "agenda", "appendix_source_notes"].includes(slide.slide_role)
+        !["title", "agenda", "statement", "appendix_source_notes"].includes(
+          slide.slide_role
+        )
     )
     .map((slide) => clientFacingSlideTitle(recipe, slide))
     .slice(0, 6);
@@ -398,7 +400,7 @@ function clientFacingReportSubtitle(recipe: DeckRecipe, reportPeriod: string) {
   }
 
   if (recipe.recipe_id === "ad_hoc_brand_safe_deck") {
-    return `Brand-governed client brief | ${reportPeriod}`;
+    return `Client brief | ${reportPeriod}`;
   }
 
   return `Client adoption report | ${reportPeriod}`;
@@ -1676,7 +1678,7 @@ export function generateDeckPlan(
             )
         },
         speaker_notes:
-          "Opening slide rendered from the approved title_client_report layout.",
+          `Welcome and introductions. Frame the goal of this ${reportPeriod} review for ${planClientName}.`,
           source_refs: ["Account metric: client_name", "Account metric: report_period", ...sourceRefsForRecipe]
         };
       case "agenda":
@@ -1792,7 +1794,21 @@ export function generateDeckPlan(
             options.contextPack,
             productUpdates,
             current
+          ).sort((a, b) => (b.count ?? 0) - (a.count ?? 0));
+
+          // top_feature must agree with the highest bar on the chart, so it
+          // is derived from the measured counts. The focus area is a declared
+          // business judgment (account snapshot / sources), so the declared
+          // value wins and the smallest count is only a fallback.
+          const hasMeasuredCounts = featureMetrics.some(
+            (metric) => (metric.count ?? 0) > 0
           );
+          const derivedTop = hasMeasuredCounts
+            ? featureMetrics[0]?.feature
+            : undefined;
+          const derivedLowest = hasMeasuredCounts
+            ? featureMetrics[featureMetrics.length - 1]?.feature
+            : undefined;
 
           return {
           layout_id: "feature_adoption",
@@ -1802,12 +1818,12 @@ export function generateDeckPlan(
             chart_type: "bar",
             feature_metrics: featureMetrics,
             top_feature: compactText(
-              current.top_feature || featureMetrics[0]?.feature || "Top workflow",
+              derivedTop || current.top_feature || "Top workflow",
               48
             ),
             lowest_feature: compactText(
               current.lowest_feature ||
-                featureMetrics[featureMetrics.length - 1]?.feature ||
+                derivedLowest ||
                 "Focus workflow",
               48
             )
@@ -1854,6 +1870,21 @@ export function generateDeckPlan(
             sourceDocRefs
           )
         };
+      case "statement":
+        return {
+          layout_id: "statement",
+          title: recipeSlide.title,
+          fields: {
+            deck_label: chromeLabel,
+            statement_text: compactText(
+              recipeSlide.content_focus.replaceAll("{client}", planClientName),
+              180
+            )
+          },
+          speaker_notes:
+            "Frame the goal of the meeting before moving into the data.",
+          source_refs: ["Meeting framing statement", ...sourceRefsForRecipe]
+        };
       case "appendix_source_notes":
         return {
         layout_id: "next_steps",
@@ -1862,16 +1893,16 @@ export function generateDeckPlan(
             deck_label: chromeLabel,
           steps: [
             compactText(
-              `Business data: ${inputRows.length} reporting periods reviewed for ${planClientName}.`,
+              `Usage data: ${inputRows.length} reporting periods of account metrics for ${planClientName}.`,
               140
             ),
               sourceEvidence.summary.document_count > 0
-                ? `Supporting context: ${sourceEvidence.summary.document_count} supporting document(s) reviewed.`
-                : "Supporting context: account snapshot and creator request only.",
-              "Presentation assurance: generated from the selected brand kit."
+                ? `Supporting documents: ${sourceEvidence.summary.document_count} reviewed for this report.`
+                : "Supporting context: account snapshot and team input.",
+              compactText(`Reporting window: ${reportPeriod}.`, 140)
           ],
             note: compactText(
-              "Evidence boundary for this deck.",
+              "All figures reflect the data sources listed above. Your account team can provide full detail on request.",
               160
             )
         },
@@ -1992,17 +2023,17 @@ export function generateDeckPlan(
     selectedUpdates: ProductReleaseUpdate[]
   ): DeckSlide {
     const groups = groupProductUpdatesBySolutionArea(selectedUpdates);
-    const featureMetrics =
-      groups.length > 0
-        ? groups.map((group) => ({
-            feature: compactText(group.solutionArea, 32),
-            count: group.updates.length
-          }))
-        : [
-            { feature: "Owned tools", count: current.projects_active },
-            { feature: "Active users", count: current.active_users },
-            { feature: "Mobile usage", count: current.mobile_usage_rate }
-          ];
+    const featureMetrics = (groups.length > 0
+      ? groups.map((group) => ({
+          feature: compactText(group.solutionArea, 32),
+          count: group.updates.length
+        }))
+      : [
+          { feature: "Owned tools", count: current.projects_active },
+          { feature: "Active users", count: current.active_users },
+          { feature: "Mobile usage", count: current.mobile_usage_rate }
+        ]
+    ).sort((a, b) => (b.count ?? 0) - (a.count ?? 0));
 
     return {
       layout_id: "feature_adoption",
@@ -2011,8 +2042,15 @@ export function generateDeckPlan(
         deck_label: chromeLabel,
         chart_type: "table",
         feature_metrics: featureMetrics,
-        top_feature: compactText(current.top_feature, 48),
-        lowest_feature: compactText(current.lowest_feature, 48)
+        top_feature: compactText(
+          featureMetrics[0]?.feature || current.top_feature,
+          48
+        ),
+        lowest_feature: compactText(
+          featureMetrics[featureMetrics.length - 1]?.feature ||
+            current.lowest_feature,
+          48
+        )
       },
       source_refs: appendEvidence(
         ["Product update source: release mix", ...sourceRefsForRecipe],

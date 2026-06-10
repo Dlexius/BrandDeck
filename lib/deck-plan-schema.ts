@@ -3,6 +3,7 @@ import { z } from "zod";
 export const APPROVED_LAYOUT_IDS = [
   "title_client_report",
   "agenda",
+  "statement",
   "executive_summary",
   "adoption_kpi_scorecard",
   "usage_trend",
@@ -95,6 +96,10 @@ export type BrandContract = {
     texture_title?: string;
     texture_agenda?: string;
     icons: Record<string, string>;
+    embedded_fonts?: Record<
+      string,
+      Partial<Record<"regular" | "bold" | "italic" | "boldItalic", string>>
+    >;
   };
   approved_fonts: {
     heading: string[];

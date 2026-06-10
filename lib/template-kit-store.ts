@@ -365,6 +365,12 @@ const FRAME_MAP_RULES: Record<
     layoutTerms: ["agenda"],
     preferredSourceSlides: [15]
   },
+  statement: {
+    narrativeRole: "framing statement",
+    positiveTerms: ["our goal", "goal for you", "big statement", "quote"],
+    layoutTerms: ["statement", "quote", "dark"],
+    preferredSourceSlides: []
+  },
   executive_summary: {
     narrativeRole: "executive summary",
     positiveTerms: ["simple text slide", "bullet one", "optional descriptive"],

@@ -101,15 +101,23 @@ export async function POST(request: Request) {
       fitAudit,
       planningMode: planningResult.planningMode,
       plannerModel: planningResult.plannerModel,
-      agentTrace: planningResult.agentTrace
+      agentTrace: planningResult.agentTrace,
+      followUpQuestions: planningResult.followUpQuestions ?? []
     });
   } catch (error) {
+    const details =
+      error instanceof Error &&
+      typeof (error as Error & { details?: unknown }).details === "string"
+        ? ((error as Error & { details?: string }).details as string)
+        : undefined;
+
     return NextResponse.json(
       {
         error:
           error instanceof Error
             ? error.message
-            : "Unable to generate a deck."
+            : "Unable to generate a deck.",
+        errorDetails: details
       },
       { status: 400 }
     );

@@ -2,10 +2,16 @@ import { NextResponse } from "next/server";
 import { getActiveBrandContract } from "@/lib/brand-contract-store";
 import { auditDeckFit } from "@/lib/auditDeckFit";
 import { DeckPlanSchema } from "@/lib/deck-plan-schema";
+import {
+  approvedTypefacesFromContract,
+  embedContractFonts,
+  embedTemplateFonts
+} from "@/lib/font-embedder";
 import { renderPptx } from "@/lib/renderPptx";
 import {
   buildTemplateFrameMapArtifact,
-  getTemplateKit
+  getTemplateKit,
+  listTemplateKits
 } from "@/lib/template-kit-store";
 import { validateDeckPlan } from "@/lib/validateDeckPlan";
 
@@ -59,7 +65,45 @@ export async function POST(request: Request) {
       );
     }
 
-    const pptxBuffer = await renderPptx(deckPlan, brandContract);
+    let pptxBuffer = await renderPptx(deckPlan, brandContract);
+
+    // Embed the approved brand fonts from the uploaded template so the deck
+    // renders identically on machines that do not have the fonts installed.
+    // Falls back to the most recent uploaded kit when none was specified.
+    const fontSourceKit =
+      templateKit ??
+      (() => {
+        const kits = listTemplateKits();
+        const latest = kits[kits.length - 1];
+        return latest ? getTemplateKit(latest.id) : undefined;
+      })();
+    let fontsEmbedded = "none";
+
+    if (fontSourceKit) {
+      const { buffer, report } = await embedTemplateFonts(
+        pptxBuffer,
+        fontSourceKit.buffer,
+        approvedTypefacesFromContract(brandContract)
+      );
+      pptxBuffer = buffer;
+      fontsEmbedded = report.embedded
+        ? report.embeddedTypefaces.join(", ")
+        : "none";
+    }
+
+    if (fontsEmbedded === "none") {
+      // No uploaded template available in this session - embed the fonts the
+      // brand kit ships with so the deck still renders true on any machine.
+      const { buffer, report } = await embedContractFonts(
+        pptxBuffer,
+        brandContract.template_assets?.embedded_fonts ?? {}
+      );
+      pptxBuffer = buffer;
+      fontsEmbedded = report.embedded
+        ? report.embeddedTypefaces.join(", ")
+        : "none";
+    }
+
     const fileName = safeFileName(
       `${deckPlan.client_name}_${deckPlan.report_period}_${
         deckPlan.deck_recipe_id ?? deckPlan.deck_type
@@ -77,6 +121,7 @@ export async function POST(request: Request) {
         "X-BrandDeck-Template-Fingerprint":
           templateKit?.fingerprint ?? "procore-default-contract",
         "X-BrandDeck-Fidelity-Mode": fidelityMode,
+        "X-BrandDeck-Fonts-Embedded": fontsEmbedded,
         "X-BrandDeck-Frame-Map-Coverage": frameMapCoverage,
         "X-BrandDeck-Frame-Map-Min-Confidence": String(
           frameMapArtifact?.validation.minimumConfidence ?? 0

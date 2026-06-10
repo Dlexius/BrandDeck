@@ -43,7 +43,16 @@ const FORBIDDEN_CLIENT_COPY_PATTERNS = [
   /\bLorem ipsum\b/i,
   /\bClick to add\b/i,
   /\bThis chart is a placeholder\b/i,
-  /\bCategory\s+\d+\b/i
+  /\bCategory\s+\d+\b/i,
+  /\bbrand kit\b/i,
+  /\bbrand contract\b/i,
+  /\bpresentation assurance\b/i,
+  /\bevidence boundary\b/i,
+  /\bapproved layout/i,
+  /\bdeck plan\b/i,
+  /\brendered from\b/i,
+  /\bCSV\b/,
+  /\bcreator request\b/i
 ];
 
 function stringifyField(value: unknown): string[] {

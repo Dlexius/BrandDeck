@@ -20,6 +20,12 @@ export const BrandColorTokenUpdateSchema = z.record(HexColorSchema);
 
 type BrandContractOverrides = {
   approved_color_tokens?: Record<string, string>;
+  companyName?: string;
+  approved_fonts?: {
+    heading: string[];
+    body: string[];
+    mono: string[];
+  };
   updatedAt?: string;
 };
 
@@ -74,9 +80,46 @@ export function getActiveBrandContract() {
 
   return {
     ...defaultBrandContract,
+    companyName: overrides.companyName ?? defaultBrandContract.companyName,
+    approved_fonts:
+      overrides.approved_fonts ?? defaultBrandContract.approved_fonts,
     approved_color_tokens: approvedColorTokens,
     chart_color_rules: chartColorRulesFor(approvedColorTokens)
   } satisfies BrandContract;
+}
+
+const FontListSchema = z.array(z.string().trim().min(1).max(64)).min(1).max(4);
+
+export const BrandIdentityUpdateSchema = z.object({
+  companyName: z.string().trim().min(1).max(80).optional(),
+  approved_fonts: z
+    .object({
+      heading: FontListSchema,
+      body: FontListSchema,
+      mono: FontListSchema
+    })
+    .optional()
+});
+
+/**
+ * Persist brand identity drafted from an uploaded template (company name and
+ * approved fonts). Used by the brand-intake flow so a new brand can be set up
+ * from its own template without hand-editing the contract file.
+ */
+export function saveBrandIdentity(
+  update: z.infer<typeof BrandIdentityUpdateSchema>
+) {
+  const parsed = BrandIdentityUpdateSchema.parse(update);
+  const currentOverrides = getBrandContractOverrides();
+
+  writeRuntimeJson(BRAND_CONTRACT_OVERRIDES_FILE, {
+    ...currentOverrides,
+    companyName: parsed.companyName ?? currentOverrides.companyName,
+    approved_fonts: parsed.approved_fonts ?? currentOverrides.approved_fonts,
+    updatedAt: new Date().toISOString()
+  } satisfies BrandContractOverrides);
+
+  return getActiveBrandContract();
 }
 
 export function saveBrandColorTokens(tokens: Record<string, string>) {
@@ -104,6 +147,7 @@ export function saveBrandColorTokens(tokens: Record<string, string>) {
   }
 
   writeRuntimeJson(BRAND_CONTRACT_OVERRIDES_FILE, {
+    ...currentOverrides,
     approved_color_tokens: nextTokens,
     updatedAt: new Date().toISOString()
   } satisfies BrandContractOverrides);
@@ -112,9 +156,17 @@ export function saveBrandColorTokens(tokens: Record<string, string>) {
 }
 
 export function resetBrandColorTokens() {
+  const currentOverrides = getBrandContractOverrides();
+  const { approved_color_tokens: _tokens, ...identity } = currentOverrides;
+  const hasIdentity = Boolean(identity.companyName || identity.approved_fonts);
   const filePath = runtimePath(BRAND_CONTRACT_OVERRIDES_FILE);
 
-  if (fs.existsSync(filePath)) {
+  if (hasIdentity) {
+    writeRuntimeJson(BRAND_CONTRACT_OVERRIDES_FILE, {
+      ...identity,
+      updatedAt: new Date().toISOString()
+    } satisfies BrandContractOverrides);
+  } else if (fs.existsSync(filePath)) {
     fs.unlinkSync(filePath);
   }
 
