@@ -11,6 +11,7 @@ export const LAYOUT_ITEM_CAPACITY = {
   recommendations: 2,
   steps: 3,
   feature_metrics: 3,
+  action_items: 5,
   source_notes: 3
 } as const;
 
@@ -34,11 +35,13 @@ const TITLE_LIMITS: Record<DeckSlide["layout_id"], number> = {
   title_client_report: 64,
   agenda: 48,
   statement: 40,
+  photo_section_divider: 56,
   executive_summary: 72,
   adoption_kpi_scorecard: 80,
   usage_trend: 80,
   feature_adoption: 80,
   risks_recommendations: 72,
+  action_plan_table: 72,
   next_steps: 64
 };
 
@@ -122,6 +125,17 @@ function fieldCapacityForSlide(slide: DeckSlide) {
     return {
       fieldName: "feature_metrics",
       capacity: LAYOUT_ITEM_CAPACITY.feature_metrics
+    };
+  }
+
+  // Action rows are objects, so they chunk but never pad with filler copy.
+  if (
+    slide.layout_id === "action_plan_table" &&
+    Array.isArray(slide.fields.action_items)
+  ) {
+    return {
+      fieldName: "action_items",
+      capacity: LAYOUT_ITEM_CAPACITY.action_items
     };
   }
 

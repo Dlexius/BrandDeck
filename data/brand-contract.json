@@ -133,6 +133,17 @@
       "approved_chart_types": []
     },
     {
+      "layout_id": "photo_section_divider",
+      "name": "Photo Section Divider",
+      "purpose": "Photo-led chapter divider that introduces the next section using approved template imagery.",
+      "required_placeholders": ["section_label"],
+      "max_text_lengths": {
+        "title": 56,
+        "section_label": 40
+      },
+      "approved_chart_types": []
+    },
+    {
       "layout_id": "executive_summary",
       "name": "Executive Summary",
       "purpose": "Summarizes adoption health, business impact, and decisions needed.",
@@ -205,6 +216,19 @@
         "recommendations": 150
       },
       "approved_chart_types": []
+    },
+    {
+      "layout_id": "action_plan_table",
+      "name": "Action Plan Table",
+      "purpose": "Partner action plan table pairing each action with an owner, timing, and status chip.",
+      "required_placeholders": ["action_items"],
+      "max_text_lengths": {
+        "title": 72,
+        "action_items": 96,
+        "plan_summary": 150,
+        "note": 160
+      },
+      "approved_chart_types": ["table"]
     },
     {
       "layout_id": "next_steps",

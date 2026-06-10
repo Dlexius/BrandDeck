@@ -54,7 +54,7 @@
         { "slide_role": "risks_recommendations", "layout_id": "risks_recommendations", "title": "Priority Risks & Recommendations", "content_focus": "Risks paired with actions.", "template_variant_key": "risk_actions_3up_alt" },
         { "slide_role": "kpi_scorecard", "layout_id": "adoption_kpi_scorecard", "title": "Health Signals", "content_focus": "KPI evidence for remediation focus.", "template_variant_key": "kpi_category_summary" },
         { "slide_role": "feature_adoption", "layout_id": "feature_adoption", "title": "Workflow Gaps", "content_focus": "Feature usage gaps and workflow ownership.", "template_variant_key": "feature_table_alt" },
-        { "slide_role": "next_steps", "layout_id": "next_steps", "title": "30-60-90 Day Actions", "content_focus": "Remediation actions over the next quarter.", "template_variant_key": "step_through_1" },
+        { "slide_role": "action_plan_table", "layout_id": "action_plan_table", "title": "30-60-90 Day Action Plan", "content_focus": "Remediation actions with owners, timing, and status." },
         { "slide_role": "appendix_source_notes", "layout_id": "next_steps", "title": "Appendix: Source Notes", "content_focus": "Source data and generation controls.", "template_variant_key": "step_through_3" }
       ]
     },
@@ -70,11 +70,12 @@
         { "slide_role": "agenda", "layout_id": "agenda", "title": "QBR Flow", "content_focus": "Value story, adoption health, product usage, risks, and next-quarter priorities." },
         { "slide_role": "statement", "layout_id": "statement", "title": "Our goal for you today", "content_focus": "Turn {client}'s operating data into *decisions that protect schedule and budget*." },
         { "slide_role": "executive_summary", "layout_id": "executive_summary", "title": "Executive Value Readout", "content_focus": "Quarterly value delivered and decisions needed.", "template_variant_key": "summary_list_2col" },
+        { "slide_role": "photo_section_divider", "layout_id": "photo_section_divider", "title": "The Quarter in Numbers", "content_focus": "Health, momentum, and product usage" },
         { "slide_role": "kpi_scorecard", "layout_id": "adoption_kpi_scorecard", "title": "Quarterly Health Signals", "content_focus": "Current KPI health, licensed coverage, projects, and mobile usage.", "template_variant_key": "kpi_category_summary" },
         { "slide_role": "usage_trend", "layout_id": "usage_trend", "title": "Adoption Momentum", "content_focus": "Adoption score and active user movement across the quarter.", "template_variant_key": "trend_stacked_chart" },
         { "slide_role": "feature_adoption", "layout_id": "feature_adoption", "title": "Product Usage Mix", "content_focus": "Workflow usage and strongest or weakest module signals.", "template_variant_key": "feature_table_alt" },
         { "slide_role": "risks_recommendations", "layout_id": "risks_recommendations", "title": "Value Risks & Decisions", "content_focus": "Risks and sponsor decisions tied to next-quarter value.", "template_variant_key": "risk_actions_3up" },
-        { "slide_role": "next_steps", "layout_id": "next_steps", "title": "Next-Quarter Plan", "content_focus": "Prioritized initiatives and owners for the next quarter.", "template_variant_key": "step_through_1" },
+        { "slide_role": "action_plan_table", "layout_id": "action_plan_table", "title": "Next-Quarter Action Plan", "content_focus": "Prioritized initiatives with owners, timing, and status." },
         { "slide_role": "risks_recommendations", "layout_id": "risks_recommendations", "title": "Expansion Opportunities", "content_focus": "Where client tools and usage patterns suggest follow-up value.", "template_variant_key": "risk_actions_3up_alt" },
         { "slide_role": "appendix_source_notes", "layout_id": "next_steps", "title": "Source Notes", "content_focus": "Source data and generation controls.", "template_variant_key": "step_through_3" }
       ]
@@ -96,7 +97,7 @@
         { "slide_role": "product_release_detail", "layout_id": "risks_recommendations", "title": "Release Detail", "content_focus": "What changed, why it matters, launch type, region, and client implication.", "template_variant_key": "risk_actions_3up" },
         { "slide_role": "usage_trend", "layout_id": "usage_trend", "title": "Readiness", "content_focus": "Usage trajectory that supports or limits product rollout.", "template_variant_key": "trend_stacked_chart" },
         { "slide_role": "risks_recommendations", "layout_id": "risks_recommendations", "title": "Rollout Risks & Enablement", "content_focus": "Risks, enablement needs, and product update actions.", "template_variant_key": "risk_actions_3up_alt" },
-        { "slide_role": "next_steps", "layout_id": "next_steps", "title": "Client-Specific Rollout Plan", "content_focus": "Practical next steps tied to owned tools and active workflows.", "template_variant_key": "step_through_2" },
+        { "slide_role": "action_plan_table", "layout_id": "action_plan_table", "title": "Client-Specific Rollout Plan", "content_focus": "Rollout actions tied to owned tools, with owners, timing, and status." },
         { "slide_role": "appendix_source_notes", "layout_id": "next_steps", "title": "Source Notes", "content_focus": "Source data and generation controls.", "template_variant_key": "step_through_3" }
       ]
     },

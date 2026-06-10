@@ -158,6 +158,127 @@ function StatementPreview({
   );
 }
 
+function PhotoDividerPreview({
+  slide,
+  tokens,
+  heroPhoto
+}: {
+  slide: DeckSlide;
+  tokens: Tokens;
+  heroPhoto?: string;
+}) {
+  return (
+    <div
+      className="flex h-full"
+      style={{ background: tok(tokens, "black", "#000000") }}
+    >
+      <div className="flex w-[62%] flex-col justify-center px-3">
+        <div
+          className="truncate font-mono text-[5px] font-bold uppercase tracking-[0.08em]"
+          style={{ color: tok(tokens, "primary_orange", "#FF5200") }}
+        >
+          {text(slide.fields.section_label)}
+        </div>
+        <div className="mt-0.5 line-clamp-2 text-[11px] font-black leading-tight text-white">
+          {slide.title}
+        </div>
+      </div>
+      {heroPhoto ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={heroPhoto}
+          alt="Approved template imagery"
+          className="w-[38%] object-cover"
+        />
+      ) : (
+        <div
+          className="w-[38%]"
+          style={{ background: tok(tokens, "primary_orange", "#FF5200") }}
+        />
+      )}
+    </div>
+  );
+}
+
+const PREVIEW_STATUS_CHIPS: Record<string, { label: string; token: string; textToken: string }> = {
+  on_track: { label: "ON TRACK", token: "ink", textToken: "white" },
+  at_risk: { label: "AT RISK", token: "primary_orange", textToken: "white" },
+  needs_owner: { label: "NEEDS OWNER", token: "stone", textToken: "charcoal" },
+  complete: { label: "COMPLETE", token: "medium_gray", textToken: "white" }
+};
+
+function ActionPlanPreview({
+  slide,
+  tokens
+}: {
+  slide: DeckSlide;
+  tokens: Tokens;
+}) {
+  const items = list<{
+    action?: unknown;
+    owner?: unknown;
+    timing?: unknown;
+    status?: unknown;
+  }>(slide.fields.action_items).slice(0, 5);
+
+  return (
+    <div className="flex h-full flex-col bg-white p-2">
+      <MiniTitle tokens={tokens} title={slide.title} />
+      <div className="mt-auto flex flex-col gap-[3px] pb-1">
+        {items.map((item, index) => {
+          const chip =
+            PREVIEW_STATUS_CHIPS[String(item.status ?? "").toLowerCase()] ?? {
+              label: text(item.status, "PLANNED").toUpperCase(),
+              token: "light_gray",
+              textToken: "charcoal"
+            };
+
+          return (
+            <div
+              key={index}
+              className="flex items-center gap-1 rounded-[1px] px-1 py-[2px]"
+              style={{
+                background:
+                  index % 2 === 0
+                    ? tok(tokens, "light_gray", "#F3F3F3")
+                    : "#FFFFFF"
+              }}
+            >
+              <span
+                className="flex-1 truncate text-[5.5px] font-bold"
+                style={{ color: tok(tokens, "ink", "#3A3735") }}
+              >
+                {text(item.action)}
+              </span>
+              <span
+                className="w-[18%] truncate text-[5px]"
+                style={{ color: tok(tokens, "medium_gray", "#787E89") }}
+              >
+                {text(item.owner)}
+              </span>
+              <span
+                className="w-[11%] truncate text-[5px]"
+                style={{ color: tok(tokens, "medium_gray", "#787E89") }}
+              >
+                {text(item.timing)}
+              </span>
+              <span
+                className="shrink-0 rounded-[2px] px-1 py-[1px] font-mono text-[4px] font-bold"
+                style={{
+                  background: tok(tokens, chip.token, "#3A3735"),
+                  color: tok(tokens, chip.textToken, "#FFFFFF")
+                }}
+              >
+                {chip.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ExecutiveSummaryPreview({
   slide,
   tokens
@@ -472,16 +593,20 @@ function SlideThumb({
   slide,
   plan,
   tokens,
-  pageNumber
+  pageNumber,
+  heroPhoto
 }: {
   slide: DeckSlide;
   plan: DeckPlan;
   tokens: Tokens;
   pageNumber: number;
+  heroPhoto?: string;
 }) {
   const isTitle = slide.layout_id === "title_client_report";
   const isAgenda =
-    slide.layout_id === "agenda" || slide.layout_id === "statement";
+    slide.layout_id === "agenda" ||
+    slide.layout_id === "statement" ||
+    slide.layout_id === "photo_section_divider";
 
   return (
     <figure className="workflow-soft-raise m-0">
@@ -507,6 +632,13 @@ function SlideThumb({
           {slide.layout_id === "statement" && (
             <StatementPreview slide={slide} tokens={tokens} />
           )}
+          {slide.layout_id === "photo_section_divider" && (
+            <PhotoDividerPreview
+              slide={slide}
+              tokens={tokens}
+              heroPhoto={heroPhoto}
+            />
+          )}
           {slide.layout_id === "executive_summary" && (
             <ExecutiveSummaryPreview slide={slide} tokens={tokens} />
           )}
@@ -521,6 +653,9 @@ function SlideThumb({
           )}
           {slide.layout_id === "risks_recommendations" && (
             <RisksPreview slide={slide} tokens={tokens} />
+          )}
+          {slide.layout_id === "action_plan_table" && (
+            <ActionPlanPreview slide={slide} tokens={tokens} />
           )}
           {slide.layout_id === "next_steps" && (
             <StepsPreview slide={slide} tokens={tokens} />
@@ -544,6 +679,7 @@ export function DeckPreview({
 }) {
   const [expanded, setExpanded] = useState(true);
   const tokens = brandContract.approved_color_tokens ?? {};
+  const heroPhoto = brandContract.template_assets?.hero_photo;
   const slides = deckPlan.slides ?? [];
 
   return (
@@ -574,6 +710,7 @@ export function DeckPreview({
               plan={deckPlan}
               tokens={tokens}
               pageNumber={index + 1}
+              heroPhoto={heroPhoto}
             />
           ))}
         </div>

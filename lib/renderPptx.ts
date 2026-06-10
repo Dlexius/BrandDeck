@@ -1,7 +1,12 @@
 import pptxgen from "pptxgenjs";
 import JSZip from "jszip";
 import path from "node:path";
-import type { BrandContract, DeckPlan, DeckSlide } from "@/lib/deck-plan-schema";
+import type {
+  ActionPlanStatus,
+  BrandContract,
+  DeckPlan,
+  DeckSlide
+} from "@/lib/deck-plan-schema";
 
 const SLIDE_W = 13.333;
 const SLIDE_H = 7.5;
@@ -509,6 +514,243 @@ function renderStatement(
   );
 }
 
+function renderPhotoSectionDivider(
+  pptx: Deck,
+  slide: Slide,
+  contract: BrandContract,
+  slideDef: DeckSlide
+) {
+  // Photo-led chapter divider mirroring the approved template's section
+  // breaks: dark left panel with kicker + section title, approved template
+  // imagery filling the right band. All geometry, colors, and the photo
+  // itself are renderer-owned; the plan only supplies the words.
+  addBackground(pptx, slide, contract, "dark");
+  const photoX = px(1108.56);
+  const heroPath = templateAsset(contract, "hero_photo");
+
+  if (heroPath) {
+    slide.addImage({
+      path: heroPath,
+      x: photoX,
+      y: 0,
+      w: SLIDE_W - photoX,
+      h: SLIDE_H,
+      sizing: { type: "cover", x: photoX, y: 0, w: SLIDE_W - photoX, h: SLIDE_H },
+      altText: `${contract.companyName} approved template imagery`
+    });
+  } else {
+    slide.addShape(pptx.ShapeType.rect, {
+      x: photoX,
+      y: 0,
+      w: SLIDE_W - photoX,
+      h: SLIDE_H,
+      fill: { color: hex(contract, "primary_orange") },
+      line: { color: hex(contract, "primary_orange") }
+    });
+  }
+
+  slide.addText(text(slideDef.fields.deck_label, "CLIENT REPORT").toUpperCase(), {
+    x: px(22.12),
+    y: px(19.92),
+    w: px(400),
+    h: px(19.4),
+    margin: 0,
+    fontFace: FONT_MONO,
+    fontSize: 8,
+    color: hex(contract, "white")
+  });
+  slide.addShape(pptx.ShapeType.hexagon, {
+    x: px(1866.13),
+    y: px(23.65),
+    w: px(31.75),
+    h: px(27.46),
+    fill: { color: hex(contract, "primary_orange") },
+    line: { color: hex(contract, "primary_orange") }
+  });
+  slide.addText(text(slideDef.fields.section_label).toUpperCase(), {
+    x: px(96),
+    y: px(400),
+    w: px(940),
+    h: px(34),
+    margin: 0,
+    fontFace: FONT_MONO,
+    fontSize: 13,
+    bold: true,
+    color: hex(contract, "primary_orange")
+  });
+  slide.addText(slideDef.title, {
+    x: px(96),
+    y: px(452),
+    w: px(940),
+    h: px(280),
+    margin: 0,
+    fontFace: FONT_HEAD,
+    fontSize: 44,
+    bold: true,
+    breakLine: false,
+    color: hex(contract, "white"),
+    fit: "shrink",
+    valign: "top"
+  });
+  slide.addImage({
+    path: templateAsset(contract, "wordmark_white"),
+    x: px(23.46),
+    y: px(1024.5),
+    w: px(244.39),
+    h: px(31.5),
+    altText: `${contract.companyName} wordmark from the approved template`
+  });
+}
+
+/**
+ * Status chips are a fixed renderer mapping from the plan's status enum to
+ * approved color tokens - the plan picks the judgment, never the color.
+ */
+const ACTION_STATUS_CHIPS: Record<
+  ActionPlanStatus,
+  { label: string; fillToken: string; textToken: string }
+> = {
+  on_track: { label: "On track", fillToken: "ink", textToken: "white" },
+  at_risk: { label: "At risk", fillToken: "primary_orange", textToken: "white" },
+  needs_owner: { label: "Needs owner", fillToken: "stone", textToken: "charcoal" },
+  complete: { label: "Complete", fillToken: "medium_gray", textToken: "white" }
+};
+
+function actionStatusChip(status: unknown) {
+  const key = String(status ?? "").toLowerCase() as ActionPlanStatus;
+  return (
+    ACTION_STATUS_CHIPS[key] ?? {
+      label: String(status ?? "Planned"),
+      fillToken: "light_gray",
+      textToken: "charcoal"
+    }
+  );
+}
+
+function renderActionPlanTable(
+  pptx: Deck,
+  slide: Slide,
+  contract: BrandContract,
+  slideDef: DeckSlide
+) {
+  addTitle(slide, contract, slideDef.title, { w: px(1300) });
+  const planSummary = text(slideDef.fields.plan_summary);
+
+  if (planSummary) {
+    addBodyCopy(slide, contract, planSummary, px(22.12), px(228.7), px(1500), px(60), {
+      fontSize: 11.5
+    });
+  }
+
+  const items = arrayField<{
+    action?: unknown;
+    owner?: unknown;
+    timing?: unknown;
+    status?: unknown;
+  }>(slideDef.fields.action_items).slice(0, 5);
+
+  // Fixed table geometry: action | owner | timing | status columns.
+  const columns = [
+    { label: "Action", x: px(22.12), w: px(900) },
+    { label: "Owner", x: px(952), w: px(360) },
+    { label: "Timing", x: px(1342), w: px(240) },
+    { label: "Status", x: px(1612), w: px(286) }
+  ];
+  const headerY = px(330);
+  columns.forEach((column) => {
+    addLabel(slide, contract, column.label, column.x, headerY, {
+      colorToken: "ink",
+      w: column.w
+    });
+  });
+  slide.addShape(pptx.ShapeType.line, {
+    x: px(22.12),
+    y: headerY + 0.26,
+    w: px(1875),
+    h: 0,
+    line: { color: hex(contract, "charcoal"), width: 1.1 }
+  });
+
+  const rowTop = px(392);
+  const rowH = px(104);
+  const rowGap = px(12);
+  items.forEach((item, index) => {
+    const y = rowTop + index * (rowH + rowGap);
+    slide.addShape(pptx.ShapeType.rect, {
+      x: px(22.12),
+      y,
+      w: px(1875),
+      h: rowH,
+      fill: { color: hex(contract, index % 2 === 0 ? "light_gray" : "white") },
+      line: { color: hex(contract, "stone"), width: 0.4 }
+    });
+    addBodyCopy(
+      slide,
+      contract,
+      text(item.action),
+      columns[0].x + 0.18,
+      y + 0.1,
+      columns[0].w - 0.3,
+      rowH - 0.2,
+      { fontSize: 11, bold: true, valign: "middle" }
+    );
+    addBodyCopy(
+      slide,
+      contract,
+      text(item.owner),
+      columns[1].x,
+      y + 0.1,
+      columns[1].w - 0.15,
+      rowH - 0.2,
+      { fontSize: 10, valign: "middle" }
+    );
+    addBodyCopy(
+      slide,
+      contract,
+      text(item.timing),
+      columns[2].x,
+      y + 0.1,
+      columns[2].w - 0.15,
+      rowH - 0.2,
+      { fontSize: 10, valign: "middle" }
+    );
+
+    const chip = actionStatusChip(item.status);
+    const chipH = px(46);
+    const chipY = y + (rowH - chipH) / 2;
+    slide.addShape(pptx.ShapeType.roundRect, {
+      x: columns[3].x,
+      y: chipY,
+      w: px(250),
+      h: chipH,
+      rectRadius: 0.115,
+      fill: { color: hex(contract, chip.fillToken) },
+      line: { color: hex(contract, chip.fillToken) }
+    });
+    slide.addText(chip.label.toUpperCase(), {
+      x: columns[3].x,
+      y: chipY,
+      w: px(250),
+      h: chipH,
+      margin: 0,
+      align: "center",
+      valign: "middle",
+      fontFace: FONT_MONO,
+      fontSize: 7.5,
+      bold: true,
+      color: hex(contract, chip.textToken)
+    });
+  });
+
+  if (slideDef.fields.note) {
+    const noteY = rowTop + items.length * (rowH + rowGap) + 0.08;
+    addBodyCopy(slide, contract, text(slideDef.fields.note), px(22.12), noteY, px(1500), px(40), {
+      fontSize: 9.5,
+      colorToken: "medium_gray"
+    });
+  }
+}
+
 function renderExecutiveSummary(
   slide: Slide,
   contract: BrandContract,
@@ -988,6 +1230,12 @@ function renderSlide(
     return;
   }
 
+  // The divider owns its full-bleed photo chrome, like the title slide.
+  if (slideDef.layout_id === "photo_section_divider") {
+    renderPhotoSectionDivider(pptx, slide, contract, slideDef);
+    return;
+  }
+
   const dark =
     slideDef.layout_id === "agenda" || slideDef.layout_id === "statement";
   // The section kicker mirrors the slide's actual title so an appendix slide
@@ -1024,6 +1272,9 @@ function renderSlide(
       break;
     case "risks_recommendations":
       renderRisks(pptx, slide, contract, slideDef);
+      break;
+    case "action_plan_table":
+      renderActionPlanTable(pptx, slide, contract, slideDef);
       break;
     case "next_steps":
       renderNextSteps(pptx, slide, contract, slideDef);

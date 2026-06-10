@@ -1,4 +1,5 @@
 import {
+  type ActionPlanItem,
   type BrandContract,
   type DeckPlan,
   type DeckSlide,
@@ -374,9 +375,13 @@ function agendaItemsForRecipe(recipe: DeckRecipe) {
   return recipe.slide_sequence
     .filter(
       (slide) =>
-        !["title", "agenda", "statement", "appendix_source_notes"].includes(
-          slide.slide_role
-        )
+        ![
+          "title",
+          "agenda",
+          "statement",
+          "photo_section_divider",
+          "appendix_source_notes"
+        ].includes(slide.slide_role)
     )
     .map((slide) => clientFacingSlideTitle(recipe, slide))
     .slice(0, 6);
@@ -800,6 +805,46 @@ function actionStepsForRecipe(recipe: DeckRecipe, current: NormalizedRow) {
 
 function normalizeWhitespace(text: string) {
   return text.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Deterministic partner-plan rows from the same governed action pool the
+ * next_steps layout uses. Owners are role labels (never invented names) and
+ * statuses are derived from the action's own wording and the declared focus
+ * area, so the table stays grounded in supplied context.
+ */
+function buildActionPlanItems(
+  recipe: DeckRecipe,
+  current: NormalizedRow,
+  actionLines: string[]
+): ActionPlanItem[] {
+  const quarterly = recipe.recipe_id === "quarterly_business_review";
+  const timings = quarterly
+    ? ["Month 1", "Month 2", "Month 3", "This quarter", "Next quarter"]
+    : ["30 days", "60 days", "90 days", "This quarter", "Next review"];
+  const focusNoun = workflowNoun(current.lowest_feature).toLowerCase();
+
+  return actionLines.slice(0, 5).map((line, index) => {
+    const normalized = line.toLowerCase();
+    const needsOwner =
+      /\b(assign|confirm|name)\b/.test(normalized) &&
+      /\b(owner|owners|sponsor|cadence)\b/.test(normalized);
+    const touchesFocusArea = Boolean(focusNoun) && normalized.includes(focusNoun);
+    const owner = needsOwner
+      ? "Client workflow owner"
+      : /\b(executive|sponsor|steering|leadership|decision|renewal)\b/.test(normalized)
+        ? "Executive sponsor"
+        : /\b(field|mobile|daily log|onboarding|training|enable|coach)\b/.test(normalized)
+          ? "Field leadership"
+          : "Customer success lead";
+
+    return {
+      action: compactText(line, 96),
+      owner,
+      timing: timings[index] ?? "This quarter",
+      status: needsOwner ? "needs_owner" : touchesFocusArea ? "at_risk" : "on_track"
+    };
+  });
 }
 
 function compactSourceSnippet(text: string, maxLength = 140) {
@@ -1885,6 +1930,44 @@ export function generateDeckPlan(
             "Frame the goal of the meeting before moving into the data.",
           source_refs: ["Meeting framing statement", ...sourceRefsForRecipe]
         };
+      case "action_plan_table":
+        return {
+          layout_id: "action_plan_table",
+          title: recipeSlide.title,
+          fields: {
+            deck_label: chromeLabel,
+            chart_type: "table",
+            plan_summary: compactText(
+              recipe.recipe_id === "quarterly_business_review"
+                ? "Owners, timing, and status for next-quarter priorities."
+                : "Owners, timing, and status for the next 90 days.",
+              150
+            ),
+            action_items: buildActionPlanItems(recipe, current, nextStepLines())
+          },
+          source_refs: appendEvidence(
+            [
+              "Account context: recommendations",
+              "Prompt: action emphasis",
+              ...sourceRefsForRecipe
+            ],
+            sourceDocRefs
+          )
+        };
+      case "photo_section_divider":
+        return {
+          layout_id: "photo_section_divider",
+          title: recipeSlide.title,
+          fields: {
+            deck_label: chromeLabel,
+            section_label: compactText(
+              recipeSlide.content_focus.replaceAll("{client}", planClientName),
+              40
+            )
+          },
+          speaker_notes: "Transition into the next section of the discussion.",
+          source_refs: ["Section divider", ...sourceRefsForRecipe]
+        };
       case "appendix_source_notes":
         return {
         layout_id: "next_steps",
@@ -1935,21 +2018,20 @@ export function generateDeckPlan(
     const launchTypes = uniqueClientLines(
       updates.map((update) => update.launchType).filter(Boolean)
     ).join(", ");
-    const tools = uniqueClientLines(updates.map((update) => update.tool))
-      .slice(0, 3)
-      .join(", ");
 
+    // Photo-led chapter break for each solution area; the release details
+    // follow on their own slides.
     return {
-      layout_id: "next_steps",
-      title: compactText(solutionArea, 48),
+      layout_id: "photo_section_divider",
+      title: compactText(solutionArea, 56),
       fields: {
         deck_label: chromeLabel,
-        steps: [
-          compactText(`${updates.length} update${updates.length === 1 ? "" : "s"} in this section.`, 130),
-          compactText(`Tools: ${tools || "customer-owned workflows"}.`, 130),
-          compactText(`Launch mix: ${launchTypes || "product update"}.`, 130)
-        ],
-        note: "Release chapter"
+        section_label: compactText(
+          `${updates.length} update${updates.length === 1 ? "" : "s"} | ${
+            launchTypes || "Product update"
+          }`,
+          40
+        )
       },
       source_refs: appendEvidence(
         [`Product update section: ${solutionArea}`, ...sourceRefsForRecipe],
@@ -2070,6 +2152,7 @@ export function generateDeckPlan(
     ];
     const closingRoles = [
       "risks_recommendations",
+      "action_plan_table",
       "next_steps",
       "appendix_source_notes"
     ];

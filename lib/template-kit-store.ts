@@ -371,6 +371,12 @@ const FRAME_MAP_RULES: Record<
     layoutTerms: ["statement", "quote", "dark"],
     preferredSourceSlides: []
   },
+  photo_section_divider: {
+    narrativeRole: "photo section divider",
+    positiveTerms: ["section title", "divider", "chapter", "photo"],
+    layoutTerms: ["section", "divider", "photo", "image"],
+    preferredSourceSlides: []
+  },
   executive_summary: {
     narrativeRole: "executive summary",
     positiveTerms: ["simple text slide", "bullet one", "optional descriptive"],
@@ -400,6 +406,12 @@ const FRAME_MAP_RULES: Record<
     positiveTerms: ["icon", "section title", "step-through"],
     layoutTerms: ["icon", "text"],
     preferredSourceSlides: [75, 76]
+  },
+  action_plan_table: {
+    narrativeRole: "action plan table",
+    positiveTerms: ["table", "status", "owner", "plan", "timeline"],
+    layoutTerms: ["table"],
+    preferredSourceSlides: []
   },
   next_steps: {
     narrativeRole: "next steps",

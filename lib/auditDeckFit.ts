@@ -160,6 +160,28 @@ function capacityChecks(slide: DeckSlide): DeckFitCheck[] {
     );
   }
 
+  if (slide.layout_id === "action_plan_table") {
+    const count = arrayLength(slide.fields.action_items);
+    checks.push(
+      check(
+        `${slide.title}:action-plan-template-minimum`,
+        "Action plan template slots",
+        count >= 1,
+        `${count}/1 required action rows populated.`,
+        slide.title
+      )
+    );
+    checks.push(
+      check(
+        `${slide.title}:action-plan-capacity`,
+        "Action plan row capacity",
+        count <= LAYOUT_ITEM_CAPACITY.action_items,
+        `${count}/${LAYOUT_ITEM_CAPACITY.action_items} action rows.`,
+        slide.title
+      )
+    );
+  }
+
   if (slide.layout_id === "feature_adoption") {
     const count = arrayLength(slide.fields.feature_metrics);
     checks.push(

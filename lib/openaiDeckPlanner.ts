@@ -30,6 +30,13 @@ const FeatureMetricSchema = z.object({
   count: z.number().min(0)
 });
 
+const ActionPlanItemSchema = z.object({
+  action: z.string().min(1).max(96),
+  owner: z.string().min(1).max(40),
+  timing: z.string().min(1).max(24),
+  status: z.enum(["on_track", "at_risk", "needs_owner", "complete"])
+});
+
 const DeckFieldsSchema = z.object({
   deck_label: z.string().min(1).max(40).nullable(),
   client_name: z.string().min(1).max(80).nullable(),
@@ -57,6 +64,9 @@ const DeckFieldsSchema = z.object({
   risk_summary: z.string().min(1).max(220).nullable(),
   recommendations: z.array(z.string().min(1).max(160)).max(6).nullable(),
   steps: z.array(z.string().min(1).max(150)).max(6).nullable(),
+  action_items: z.array(ActionPlanItemSchema).max(8).nullable(),
+  plan_summary: z.string().min(1).max(150).nullable(),
+  section_label: z.string().min(1).max(40).nullable(),
   note: z.string().min(1).max(180).nullable()
 });
 
@@ -65,11 +75,13 @@ const PlannerDeckSlideSchema = z.object({
     "title_client_report",
     "agenda",
     "statement",
+    "photo_section_divider",
     "executive_summary",
     "adoption_kpi_scorecard",
     "usage_trend",
     "feature_adoption",
     "risks_recommendations",
+    "action_plan_table",
     "next_steps"
   ]),
   title: z.string().min(1).max(120),
@@ -556,6 +568,8 @@ async function generateOpenAISubagentDeckPlan({
       "For every agenda slide, provide at least 4 agenda_items.",
       "For every risks_recommendations slide, provide exactly 2 recommendations.",
       "For every next_steps slide, provide exactly 3 steps.",
+      "For every action_plan_table slide, provide 3 to 5 action_items rows; each row needs an action, an owner role (a role like 'Client workflow owner', never an invented person's name), a timing window, and a status of on_track, at_risk, needs_owner, or complete that reflects the declared risks and source evidence.",
+      "Use the photo_section_divider layout only as a chapter break: the title states the section takeaway, section_label is a short kicker phrase, and divider slides carry no metrics or new claims.",
       "Feature_metrics count rows may contain count metrics only. Never place rates, percentages, usage_rate, mobile_usage_rate, analytics_usage_rate, or other percent values in feature_metrics.",
       "For product update and release-review decks, do not mention lower-relevance, omitted, or unowned product releases in client-visible slide copy, even as exclusion statements. Record them in omitted_evidence instead.",
       "For adoption, risk, QBR, and operating-review decks, source-provided workflow metrics such as RFIs, submittals, forms, or inspections may be shown as exact metric evidence even when they are not listed as product-update release items.",
@@ -701,13 +715,15 @@ async function generateOpenAISubagentDeckPlan({
         summary_points: 4,
         recommendations: 2,
         steps: 3,
-        feature_metrics: 3
+        feature_metrics: 3,
+        action_items: 5
       },
       required_template_slots: {
         agenda_items: 4,
         recommendations: 2,
         steps: 3,
-        feature_metrics: 1
+        feature_metrics: 1,
+        action_items: 1
       }
     },
     maxOutputTokens: 12000
@@ -792,6 +808,7 @@ async function generateOpenAISubagentDeckPlan({
     "For product update decks, block source-unsupported release details and recommendations. For adoption/QBR/risk decks, do not block exact source-provided workflow metrics simply because they are not release items.",
     "In trend_points, the adoption_score key is the generic plotted value for the slide's declared trend metric (see the slide's trend_metric_label field); do not block a trend slide solely because a non-adoption metric is stored under that key.",
     "On feature slides, top_feature must match the highest measured count, but lowest_feature (the focus area) is a declared business judgment from the account snapshot or sources; do not require it to equal the smallest chart count, and do not block when it matches the declared source value.",
+    "On action_plan_table slides, owners are role labels and statuses are business judgments grounded in declared risks and sources; do not block them for lacking numeric evidence.",
     "Reference metadata (source_refs, evidence_refs, constraints) has already been deterministically scrubbed; do not block on reference formatting.",
     "Never bypass validation or suggest renderer-side visual changes."
   ].join(" ");

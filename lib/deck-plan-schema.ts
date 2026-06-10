@@ -4,13 +4,31 @@ export const APPROVED_LAYOUT_IDS = [
   "title_client_report",
   "agenda",
   "statement",
+  "photo_section_divider",
   "executive_summary",
   "adoption_kpi_scorecard",
   "usage_trend",
   "feature_adoption",
   "risks_recommendations",
+  "action_plan_table",
   "next_steps"
 ] as const;
+
+export const ACTION_PLAN_STATUSES = [
+  "on_track",
+  "at_risk",
+  "needs_owner",
+  "complete"
+] as const;
+
+export type ActionPlanStatus = (typeof ACTION_PLAN_STATUSES)[number];
+
+export type ActionPlanItem = {
+  action: string;
+  owner: string;
+  timing: string;
+  status: ActionPlanStatus;
+};
 
 export const MAX_DECK_SLIDES = 32;
 export const MAX_SOURCE_DOCUMENT_CHARS = 50000;
