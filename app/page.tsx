@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { AdminRecipeBuilder } from "@/components/brand-settings/admin-recipe-builder";
 import { BrandAssetInventory } from "@/components/brand-settings/brand-asset-inventory";
 import { BrandColorSettingsPanel } from "@/components/brand-settings/brand-color-settings";
@@ -68,6 +68,10 @@ export default function Home() {
   // validated deck stays visible but export is gated until a regenerate.
   const [inputsStale, setInputsStale] = useState(false);
   const [confirmStartOver, setConfirmStartOver] = useState(false);
+  // Follow-up questions already shown this session, so a regenerate never
+  // re-asks the same thing and a refinement pass never spawns a new round.
+  const askedFollowUpQuestionsRef = useRef<Set<string>>(new Set());
+  const refiningPromptRef = useRef(false);
   const [followUpQuestions, setFollowUpQuestions] = useState<string[]>([]);
   const [adoptingIdentity, setAdoptingIdentity] = useState(false);
   const [validationReport, setValidationReport] =
@@ -267,14 +271,18 @@ export default function Home() {
         exportCertificate.frameMapFingerprint ===
           templateKit.frameMap.approval.mappingFingerprint)
   );
+  // Template clone/edit is the premium path; when its preflight or dry-run
+  // is not ready, export falls back to the governed brand-layout renderer
+  // instead of stranding the creator with a valid deck and no export.
+  const templateCloneEditReady = Boolean(
+    templateKit && brandPreflight?.status === "ready" && hasFreshExportCertificate
+  );
   const canExport = Boolean(
     deckPlan &&
       !inputsStale &&
       validationReport?.passed &&
       accuracyAudit?.passed &&
-      fitAudit?.passed &&
-      (!templateKit ||
-        (brandPreflight?.status === "ready" && hasFreshExportCertificate))
+      fitAudit?.passed
   );
   const kpiSummary = useMemo(() => {
     if (!currentRow) {
@@ -500,6 +508,8 @@ export default function Home() {
   }
 
   function handleStartOver() {
+    askedFollowUpQuestionsRef.current.clear();
+    refiningPromptRef.current = false;
     setPrompt(DEFAULT_PROMPT);
     setSelectedRecipeId("auto");
     setSelectedClientProfileId("");
@@ -668,6 +678,7 @@ export default function Home() {
     );
     setPrompt(nextPrompt);
     setFollowUpQuestions([]);
+    refiningPromptRef.current = true;
     void handleGenerate(nextPrompt);
   }
 
@@ -1433,13 +1444,53 @@ export default function Home() {
     setFitAudit(fit);
     setExportCertificate(null);
     setInputsStale(false);
-    setFollowUpQuestions((result.followUpQuestions ?? []).slice(0, 4));
 
-    if (templateKit) {
-      await refreshTemplateGovernance(templateKit.id, plan);
+    // Never re-ask a question from an earlier pass, and never open a new
+    // round right after the creator answered one - that reads as a treadmill
+    // blocking export when the questions are optional.
+    const freshQuestions = refiningPromptRef.current
+      ? []
+      : (result.followUpQuestions ?? [])
+          .filter((question) => {
+            const key = question.trim().toLowerCase();
+            return key.length > 0 && !askedFollowUpQuestionsRef.current.has(key);
+          })
+          .slice(0, 4);
+    freshQuestions.forEach((question) =>
+      askedFollowUpQuestionsRef.current.add(question.trim().toLowerCase())
+    );
+    setFollowUpQuestions(freshQuestions);
+
+    // Template governance/preflight refreshes run after the costly planning
+    // calls; if they hiccup, degrade to "needs review" instead of failing the
+    // whole generation.
+    const degradedPreflight: BrandPreflightReport = {
+      schema: "branddeck.brand-preflight/v1",
+      generatedAt: new Date().toISOString(),
+      status: "needs_review",
+      readinessScore: 0,
+      checks: [
+        {
+          id: "preflight:refresh",
+          label: "Brand preflight refresh",
+          passed: false,
+          detail:
+            "Preflight could not be refreshed after generation. Template export needs a recheck in Brand Settings; brand-layout export is unaffected."
+        }
+      ],
+      summary: { total: 1, passed: 0, failed: 1 }
+    };
+    let preflight = degradedPreflight;
+
+    try {
+      if (templateKit) {
+        await refreshTemplateGovernance(templateKit.id, plan);
+      }
+
+      preflight = await refreshBrandPreflight(templateKit?.id, plan);
+    } catch {
+      setBrandPreflight(degradedPreflight);
     }
-
-    const preflight = await refreshBrandPreflight(templateKit?.id, plan);
 
     return {
       plan,
@@ -1558,6 +1609,9 @@ export default function Home() {
       }.`;
     }
 
+    // Template clone/edit preparation is best-effort: a valid deck must stay
+    // exportable with brand layouts even when the template path is not ready.
+    const brandLayoutFallbackMessage = `${plannerPrefix}Deck generated and ready to export with ${plan.slides.length} approved brand-layout slides. Finish template mapping in Brand Settings to export with the uploaded template instead.`;
     let exportPreflight = preflight;
 
     if (exportPreflight.status !== "ready") {
@@ -1569,18 +1623,27 @@ export default function Home() {
         failedPreflightIds.length === 1 &&
         failedPreflightIds[0] === "frame-map:approval"
       ) {
-        exportPreflight = await approveReadyFrameMapForExport(plan);
+        try {
+          exportPreflight = await approveReadyFrameMapForExport(plan);
+        } catch {
+          // Keep the not-ready preflight; the brand-layout export still works.
+        }
       }
     }
 
     if (exportPreflight.status !== "ready") {
-      return `${plannerPrefix}Deck generated, but Brand Settings need review before export.`;
+      return brandLayoutFallbackMessage;
     }
 
     setAuditingExport(true);
-    const certificate = await runTemplateExportAudit(plan);
+    try {
+      const certificate = await runTemplateExportAudit(plan);
 
-    return `${plannerPrefix}Deck generated and ready to export: ${certificate.referencedSlides} slides, ${certificate.placeholderHits} placeholder hits, ${certificate.brandValidationScore} brand validation.`;
+      return `${plannerPrefix}Deck generated and ready to export: ${certificate.referencedSlides} slides, ${certificate.placeholderHits} placeholder hits, ${certificate.brandValidationScore} brand validation.`;
+    } catch {
+      // A failed template dry-run must not discard a validated generation.
+      return brandLayoutFallbackMessage;
+    }
   }
 
   async function handleGenerate(promptOverride?: unknown) {
@@ -1642,22 +1705,26 @@ export default function Home() {
         error instanceof Error
           ? ((error as Error & { details?: string }).details ?? "")
           : "";
+      const isQuotaError = /\b429\b|exceeded your current quota|rate limit/i.test(
+        rawMessage
+      );
       const isWordy = rawMessage.length > 200;
       const keptDeckSuffix = previousDeck
         ? " Your last validated deck is still shown below."
         : "";
-      setNotice(
-        (isWordy
+      const visibleMessage = isQuotaError
+        ? "The AI provider account has hit its usage limit, so nothing was generated. Add credits or wait for the limit to reset, then generate again."
+        : isWordy
           ? "BrandDeck's automated review stopped this draft before export. Generating again usually resolves it - each pass replans the deck."
-          : rawMessage) + keptDeckSuffix,
-        {
-          tone: "error",
-          details: [isWordy ? rawMessage : "", serverDetails]
-            .filter(Boolean)
-            .join("\n\n")
-        }
-      );
+          : rawMessage;
+      setNotice(visibleMessage + keptDeckSuffix, {
+        tone: "error",
+        details: [isQuotaError || isWordy ? rawMessage : "", serverDetails]
+          .filter(Boolean)
+          .join("\n\n")
+      });
     } finally {
+      refiningPromptRef.current = false;
       setAuditingExport(false);
       setPreparingExport(false);
       setGenerating(false);
@@ -1673,7 +1740,9 @@ export default function Home() {
     setNotice("");
 
     try {
-      const useTemplateCloneEdit = Boolean(templateKit);
+      // Clone/edit only when the template path fully passed its checks;
+      // otherwise the governed coordinate renderer ships the deck.
+      const useTemplateCloneEdit = templateCloneEditReady;
       const response = await fetch(
         useTemplateCloneEdit ? "/api/clone-edit" : "/api/export",
         {
@@ -1760,12 +1829,14 @@ export default function Home() {
       );
       setNotice(
         useTemplateCloneEdit
-          ? `PPTX exported. Package audit: ${
+          ? `PPTX exported with the uploaded template. Package audit: ${
               packageAudit ?? "passed"
             }, ${referencedSlides ?? "9"} slides, ${
               placeholderHits ?? "0"
             } placeholder hits.`
-          : "PPTX exported."
+          : templateKit
+            ? "PPTX exported with approved brand layouts. Finish template mapping in Brand Settings to export with the uploaded template instead."
+            : "PPTX exported."
       );
     } catch (error) {
       const rawMessage =
@@ -2657,6 +2728,7 @@ export default function Home() {
             templateGovernance={templateGovernance}
             canExport={canExport}
             inputsStale={inputsStale}
+            cloneEditReady={templateCloneEditReady}
             generating={generating}
             preparingExport={preparingExport}
             exporting={exporting}

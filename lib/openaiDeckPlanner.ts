@@ -184,6 +184,58 @@ function cleanReferenceList(
   return result.slice(0, max);
 }
 
+// CJK / Hangul codepoints that show up as stray planner junk (e.g. an
+// orphaned "ほか" inside an otherwise-English subtitle).
+const NON_LATIN_SCRIPT_PATTERN =
+  // Hiragana, Katakana, CJK ext A, CJK unified, Hangul, CJK compat, half-width Katakana
+  /[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF\uF900-\uFAFF\uFF66-\uFF9F]/g;
+
+/**
+ * Remove stray foreign-script fragments from client-visible copy. Mostly
+ * foreign strings are left untouched (they may be intentional content for a
+ * non-English brand) and fail closed at the validator instead; only sparse
+ * fragments inside otherwise-Latin copy are treated as generation junk.
+ */
+export function scrubStrayForeignScript(value: string) {
+  const matches = value.match(NON_LATIN_SCRIPT_PATTERN);
+
+  if (!matches) {
+    return value;
+  }
+
+  if (matches.length / value.length >= 0.3) {
+    return value;
+  }
+
+  return value
+    .replace(NON_LATIN_SCRIPT_PATTERN, "")
+    .replace(/\s+/g, " ")
+    .replace(/\s+([,.;:!?)])/g, "$1")
+    .replace(/\(\s+/g, "(")
+    .trim();
+}
+
+function deepScrubClientCopy<T>(value: T): T {
+  if (typeof value === "string") {
+    return scrubStrayForeignScript(value) as T;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(deepScrubClientCopy) as T;
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
+        key,
+        deepScrubClientCopy(entry)
+      ])
+    ) as T;
+  }
+
+  return value;
+}
+
 /**
  * Deterministically scrub model-produced reference metadata so stray
  * generation text can never reach deck metadata, source-notes workflows, or
@@ -215,6 +267,11 @@ function sanitizeCandidatePlan(plan: DeckPlan, baseline: DeckPlan): DeckPlan {
     slides: plan.slides.map((slide) => {
       const next = {
         ...slide,
+        // Client-visible copy: drop stray foreign-script fragments before
+        // any reviewer sees them, so junk like a lone "ほか" in a subtitle
+        // never costs a correction pass.
+        title: scrubStrayForeignScript(slide.title),
+        fields: deepScrubClientCopy(slide.fields),
         source_refs: slide.source_refs
           ? cleanReferenceList(slide.source_refs, ["Account context"], 12)
           : slide.source_refs
@@ -579,6 +636,7 @@ async function generateOpenAISubagentDeckPlan({
       "Write slide titles as insight headlines that state the key takeaway (for example 'Collaborator use is growing but concentrated in a few tools'), not generic labels, while staying inside each layout's title length budget.",
       "The statement layout frames the meeting goal with one bold sentence in statement_text; mark exactly one key phrase with *asterisks* for approved accent emphasis, and keep the statement grounded in the selected context.",
       "Keep reference metadata (source_refs, evidence_refs, constraints) as short plain-English evidence references; never include instructions, formatting notes, or non-English text.",
+      "Write every client-visible field in the request's language (English here); never emit characters from other scripts.",
       "Keep copy concise enough for inherited PowerPoint text boxes."
     ]
   };

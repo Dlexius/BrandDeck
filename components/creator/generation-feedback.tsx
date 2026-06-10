@@ -99,8 +99,8 @@ export function FollowUpQuestions({
           Make It Sharper
         </h2>
         <p className="mt-1 text-sm text-[#787E89]">
-          BrandDeck generated your deck, and these optional details would make
-          the next pass stronger.
+          Your deck is ready to export as is. Answer any of these optional
+          details only if you want a sharper next pass.
         </p>
       </header>
       <div className="space-y-3 px-5 py-4">

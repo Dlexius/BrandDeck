@@ -52,7 +52,12 @@ const FORBIDDEN_CLIENT_COPY_PATTERNS = [
   /\bdeck plan\b/i,
   /\brendered from\b/i,
   /\bCSV\b/,
-  /\bcreator request\b/i
+  /\bcreator request\b/i,
+  // Stray foreign-script fragments are planner junk in this contract's
+  // client copy (e.g. an orphaned "ほか" inside an English subtitle). The
+  // planner sanitizer scrubs sparse fragments; anything that survives here
+  // fails closed.
+  /[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF\uF900-\uFAFF\uFF66-\uFF9F]/
 ];
 
 function stringifyField(value: unknown): string[] {

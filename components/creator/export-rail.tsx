@@ -48,7 +48,8 @@ export function ExportQualityPanel({
   templateGovernance,
   usingTemplateCloneEdit,
   exportCertificate,
-  canExport
+  canExport,
+  inputsStale = false
 }: {
   report: ValidationReport | null;
   accuracyAudit: DeckAccuracyAudit | null;
@@ -58,6 +59,7 @@ export function ExportQualityPanel({
   usingTemplateCloneEdit: boolean;
   exportCertificate: ExportCertificate | null;
   canExport: boolean;
+  inputsStale?: boolean;
 }) {
   const planReady = Boolean(report?.passed);
   const accuracyReady = Boolean(accuracyAudit?.passed);
@@ -96,7 +98,9 @@ export function ExportQualityPanel({
       passed: preflightReady,
       detail: usingTemplateCloneEdit
         ? brandPreflight
-          ? `${brandPreflight.readinessScore}% export readiness`
+          ? `${brandPreflight.readinessScore}% template readiness${
+              !preflightReady && canExport ? " (template export only)" : ""
+            }`
           : "Waiting for template checks"
         : "Built-in brand layouts ready"
     },
@@ -105,7 +109,9 @@ export function ExportQualityPanel({
       passed: objectMapReady,
       detail: usingTemplateCloneEdit
         ? templateGovernance
-          ? `${templateGovernance.summary.governanceScore}% approved`
+          ? `${templateGovernance.summary.governanceScore}% approved${
+              !objectMapReady && canExport ? " (template export only)" : ""
+            }`
           : "Object map not loaded"
         : "No template object map required"
     },
@@ -115,23 +121,23 @@ export function ExportQualityPanel({
       detail: usingTemplateCloneEdit
         ? exportCertificate?.packageAudit === "passed"
           ? `${exportCertificate.referencedSlides} slides, ${exportCertificate.placeholderHits} placeholder hits`
-          : "Runs after generation"
+          : canExport
+            ? "Template dry-run pending (template export only)"
+            : "Runs after generation"
         : "No dry-run required"
     }
   ];
   const nextAction = canExport
     ? "Export PPTX"
-    : !planReady
-      ? "Generate Presentation"
-      : !accuracyReady
-        ? "Review Sources or Generate Again"
-        : !fitReady
-          ? "Shorten Copy or Generate Again"
-          : !preflightReady
-            ? "Review Brand Settings"
-            : !objectMapReady
-              ? "Review Template Map"
-              : "Generate Presentation";
+    : inputsStale && planReady
+      ? "Regenerate with Updated Inputs"
+      : !planReady
+        ? "Generate Presentation"
+        : !accuracyReady
+          ? "Review Sources or Generate Again"
+          : !fitReady
+            ? "Shorten Copy or Generate Again"
+            : "Generate Presentation";
 
   return (
     <Card>
@@ -187,6 +193,7 @@ export function ValidationPanel({
   templateGovernance,
   canExport,
   inputsStale = false,
+  cloneEditReady = false,
   generating,
   preparingExport,
   exporting,
@@ -202,6 +209,7 @@ export function ValidationPanel({
   templateGovernance: TemplateGovernanceReport | null;
   canExport: boolean;
   inputsStale?: boolean;
+  cloneEditReady?: boolean;
   generating: boolean;
   preparingExport: boolean;
   exporting: boolean;
@@ -234,6 +242,7 @@ export function ValidationPanel({
           usingTemplateCloneEdit={usingTemplateCloneEdit}
           exportCertificate={exportCertificate}
           canExport={canExport}
+          inputsStale={inputsStale}
         />
 
         <div className="border-t border-[#E5E0DB] pt-5">
@@ -281,9 +290,11 @@ export function ValidationPanel({
           </Button>
           {usingTemplateCloneEdit && (
             <p className="mt-2 text-xs font-semibold leading-5 text-[#787E89]">
-              {exportCertificate?.packageAudit === "passed"
-                ? "Export checks passed. The PPTX is ready."
-                : "Generation will run brand and template checks automatically."}
+              {cloneEditReady
+                ? "Template checks passed. Exports use the uploaded template."
+                : canExport
+                  ? "Exports use approved brand layouts. Template export unlocks once Brand Settings mapping is complete."
+                  : "Generation will run brand and template checks automatically."}
             </p>
           )}
         </div>
