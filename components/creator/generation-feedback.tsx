@@ -13,39 +13,63 @@ export const GENERATION_STAGES = [
   "Running the final brand review"
 ];
 
+// Stage timing is paced to the real pipeline (typically 1-3 minutes) and the
+// bar holds short of 100% until the response actually lands, so the progress
+// never claims to be done while the planner is still working.
+const STAGE_INTERVAL_MS = 24000;
+const MAX_BAR_PERCENT = 92;
+
 export function GenerationProgress() {
   const [stageIndex, setStageIndex] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   useEffect(() => {
-    const timer = setInterval(() => {
+    const stageTimer = setInterval(() => {
       setStageIndex((value) =>
         Math.min(value + 1, GENERATION_STAGES.length - 1)
       );
-    }, 7000);
-    return () => clearInterval(timer);
+    }, STAGE_INTERVAL_MS);
+    const clockTimer = setInterval(() => {
+      setElapsedSeconds((value) => value + 1);
+    }, 1000);
+    return () => {
+      clearInterval(stageTimer);
+      clearInterval(clockTimer);
+    };
   }, []);
+
+  const barPercent = Math.min(
+    MAX_BAR_PERCENT,
+    ((stageIndex + 1) / GENERATION_STAGES.length) * MAX_BAR_PERCENT
+  );
+  const minutes = Math.floor(elapsedSeconds / 60);
+  const seconds = elapsedSeconds % 60;
 
   return (
     <div className="workflow-step-panel rounded-md border border-[#E5E0DB] bg-white px-4 py-3">
-      <div className="flex items-center gap-2.5">
-        <Loader2 className="h-4 w-4 animate-spin text-brand-orange" />
-        <p
-          key={stageIndex}
-          className="workflow-soft-raise text-sm font-semibold text-brand-ink"
-        >
-          {GENERATION_STAGES[stageIndex]}…
-        </p>
+      <div className="flex items-center justify-between gap-2.5">
+        <div className="flex items-center gap-2.5">
+          <Loader2 className="h-4 w-4 animate-spin text-brand-orange" />
+          <p
+            key={stageIndex}
+            className="workflow-soft-raise text-sm font-semibold text-brand-ink"
+          >
+            {GENERATION_STAGES[stageIndex]}…
+          </p>
+        </div>
+        <span className="font-mono text-xs font-bold text-[#787E89]">
+          {minutes}:{String(seconds).padStart(2, "0")}
+        </span>
       </div>
       <div className="mt-3 h-1 overflow-hidden rounded-full bg-[#F3F3F3]">
         <div
-          className="h-full rounded-full bg-brand-orange transition-all duration-[7000ms] ease-linear"
-          style={{
-            width: `${((stageIndex + 1) / GENERATION_STAGES.length) * 100}%`
-          }}
+          className="h-full rounded-full bg-brand-orange transition-all duration-[24000ms] ease-linear"
+          style={{ width: `${barPercent}%` }}
         />
       </div>
       <p className="mt-2 text-xs font-medium text-[#787E89]">
-        Brand rules stay locked while the deck is planned and reviewed.
+        Usually takes 1-3 minutes. Brand rules stay locked while the deck is
+        planned and reviewed.
       </p>
     </div>
   );

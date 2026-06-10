@@ -35,7 +35,7 @@ import { CLIENT_PROFILES, DEFAULT_PROMPT, DEFAULT_RECIPE_BUILDER, EMPTY_BUSINESS
 import { brandColorTokenLabel, businessSnapshotToRows, createSourceDocument, isHexColor, mergeSourceDocuments, recipeFromBuilder, safeDownloadFileName } from "@/lib/ui-helpers";
 import type { BrandAssetSummary, BrandContractApiResponse, BrandPreflightReport, BusinessSnapshotState, CreatorWorkflowStep, ExportCertificate, GeneratePlanApiResponse, GoogleDriveConnectorStatus, GoogleDriveFileOption, GoogleDriveImportResponse, GoogleWorkspaceSourceType, RecipeBuilderState, SettingsSection, SourceDocumentSummary, TemplateGovernanceReport, TemplateKitSummary, WorkspaceView } from "@/lib/ui-types";
 import { ValidationReport, validateDeckPlan } from "@/lib/validateDeckPlan";
-import { ArrowRight, Fingerprint, Loader2, Lock, Presentation, RotateCcw, Search, Sparkles, Type, Upload, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, Fingerprint, Loader2, Lock, Presentation, RotateCcw, Search, Sparkles, Type, Upload, X } from "lucide-react";
 
 export default function Home() {
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
@@ -64,6 +64,10 @@ export default function Home() {
     string[]
   >([]);
   const [deckPlan, setDeckPlan] = useState<DeckPlan | null>(null);
+  // True when inputs changed after the last successful generation; the last
+  // validated deck stays visible but export is gated until a regenerate.
+  const [inputsStale, setInputsStale] = useState(false);
+  const [confirmStartOver, setConfirmStartOver] = useState(false);
   const [followUpQuestions, setFollowUpQuestions] = useState<string[]>([]);
   const [adoptingIdentity, setAdoptingIdentity] = useState(false);
   const [validationReport, setValidationReport] =
@@ -241,6 +245,21 @@ export default function Home() {
     };
   }, []);
 
+  // A file dropped outside a dropzone would otherwise navigate the browser
+  // to the file and destroy all creator input.
+  useEffect(() => {
+    const preventStrayDrop = (event: DragEvent) => {
+      event.preventDefault();
+    };
+
+    window.addEventListener("dragover", preventStrayDrop);
+    window.addEventListener("drop", preventStrayDrop);
+    return () => {
+      window.removeEventListener("dragover", preventStrayDrop);
+      window.removeEventListener("drop", preventStrayDrop);
+    };
+  }, []);
+
   const hasFreshExportCertificate = Boolean(
     exportCertificate &&
       exportCertificate.packageAudit === "passed" &&
@@ -250,6 +269,7 @@ export default function Home() {
   );
   const canExport = Boolean(
     deckPlan &&
+      !inputsStale &&
       validationReport?.passed &&
       accuracyAudit?.passed &&
       fitAudit?.passed &&
@@ -295,6 +315,16 @@ export default function Home() {
     setAccuracyAudit(null);
     setFitAudit(null);
     setExportCertificate(null);
+    setInputsStale(false);
+  }
+
+  // Input edits no longer destroy the last validated deck: the preview stays
+  // visible, the deck is flagged stale, and export is gated until the next
+  // successful generation.
+  function markGeneratedDeckStale() {
+    if (deckPlan) {
+      setInputsStale(true);
+    }
   }
 
   async function refreshGoogleDriveStatus() {
@@ -335,7 +365,8 @@ export default function Home() {
       setNotice(
         error instanceof Error
           ? error.message
-          : "Unable to disconnect Google Drive."
+          : "Unable to disconnect Google Drive.",
+        { tone: "error" }
       );
     }
   }
@@ -389,7 +420,8 @@ export default function Home() {
       );
     } catch (error) {
       setNotice(
-        error instanceof Error ? error.message : "Unable to search Google Drive."
+        error instanceof Error ? error.message : "Unable to search Google Drive.",
+        { tone: "error" }
       );
     } finally {
       setSearchingGoogleDrive(false);
@@ -403,7 +435,7 @@ export default function Home() {
 
     setImportingGoogleDrive(true);
     setNotice("");
-    resetGeneratedDeck();
+    markGeneratedDeckStale();
 
     try {
       const response = await fetch("/api/connectors/google-drive/import", {
@@ -446,11 +478,25 @@ export default function Home() {
       setNotice(
         error instanceof Error
           ? error.message
-          : "Unable to import Google Drive files."
+          : "Unable to import Google Drive files.",
+        { tone: "error" }
       );
     } finally {
       setImportingGoogleDrive(false);
     }
+  }
+
+  // Start Over wipes all three steps of creator input, so it asks once: the
+  // first click arms the button, the second within a few seconds confirms.
+  function handleStartOverRequest() {
+    if (!confirmStartOver) {
+      setConfirmStartOver(true);
+      window.setTimeout(() => setConfirmStartOver(false), 4000);
+      return;
+    }
+
+    setConfirmStartOver(false);
+    handleStartOver();
   }
 
   function handleStartOver() {
@@ -480,7 +526,7 @@ export default function Home() {
     setBusinessSnapshot(snapshot);
     setCsvRows(businessSnapshotToRows(snapshot));
     setMetricImport(null);
-    resetGeneratedDeck();
+    markGeneratedDeckStale();
     if (noticeMessage) {
       setNotice(noticeMessage);
     } else {
@@ -508,7 +554,7 @@ export default function Home() {
       setMetricImport({ ...metricImport, rows: nextRows });
       setCsvRows(nextRows);
       setBusinessSnapshot(nextSnapshot);
-      resetGeneratedDeck();
+      markGeneratedDeckStale();
       setNotice("");
       return;
     }
@@ -534,7 +580,7 @@ export default function Home() {
         ...EMPTY_BUSINESS_SNAPSHOT,
         ...businessSnapshotFromImport(imported.rows)
       });
-      resetGeneratedDeck();
+      markGeneratedDeckStale();
       setNotice(
         `Imported ${imported.rows.length} period${
           imported.rows.length === 1 ? "" : "s"
@@ -555,7 +601,7 @@ export default function Home() {
   function handleClearMetricImport() {
     setMetricImport(null);
     setCsvRows(businessSnapshotToRows(businessSnapshot));
-    resetGeneratedDeck();
+    markGeneratedDeckStale();
     setNotice(
       "Metrics import cleared. The snapshot fields below keep the latest imported values."
     );
@@ -612,7 +658,11 @@ export default function Home() {
     const additions = answers
       .map(({ question, answer }) => `${question} ${answer}`)
       .join(" ");
-    const nextPrompt = `${prompt.trim()}\n\nAdded details: ${additions}`.slice(
+    // Trim the base prompt, never the answers, so added details survive the
+    // 1000-character prompt budget.
+    const suffix = `\n\nAdded details: ${additions}`;
+    const baseBudget = Math.max(0, 1000 - suffix.length);
+    const nextPrompt = `${prompt.trim().slice(0, baseBudget)}${suffix}`.slice(
       0,
       1000
     );
@@ -622,11 +672,21 @@ export default function Home() {
   }
 
   function handleLoadExampleBrief() {
-    setPrompt(DEFAULT_PROMPT);
+    // Don't clobber a prompt the creator already customized; the example
+    // still fills the metrics and context they are missing.
+    const promptIsCustom =
+      prompt.trim().length > 0 && prompt.trim() !== DEFAULT_PROMPT;
+
+    if (!promptIsCustom) {
+      setPrompt(DEFAULT_PROMPT);
+    }
+
     setSelectedRecipeId("auto");
     applyBusinessSnapshot(
       EXAMPLE_BUSINESS_SNAPSHOT,
-      "Example brief and account data loaded. Review the context, then generate."
+      promptIsCustom
+        ? "Example account data loaded. Your request text was kept - review the context, then generate."
+        : "Example brief and account data loaded. Review the context, then generate."
     );
     setActiveCreatorStep("context");
   }
@@ -648,14 +708,14 @@ export default function Home() {
 
   function handleClientProfileContextChange(value: string) {
     setClientProfileContext(value);
-    resetGeneratedDeck();
+    markGeneratedDeckStale();
     setNotice("");
   }
 
   function handleClearClientProfile() {
     setSelectedClientProfileId("");
     setClientProfileContext("");
-    resetGeneratedDeck();
+    markGeneratedDeckStale();
     setNotice("Client profile cleared. Metrics and source notes are unchanged.");
   }
 
@@ -720,7 +780,8 @@ export default function Home() {
       );
     } catch (error) {
       setNotice(
-        error instanceof Error ? error.message : "Unable to save brand colors."
+        error instanceof Error ? error.message : "Unable to save brand colors.",
+        { tone: "error" }
       );
     } finally {
       setSavingBrandColors(false);
@@ -747,7 +808,8 @@ export default function Home() {
       setNotice("Brand colors reset to the default contract.");
     } catch (error) {
       setNotice(
-        error instanceof Error ? error.message : "Unable to reset brand colors."
+        error instanceof Error ? error.message : "Unable to reset brand colors.",
+        { tone: "error" }
       );
     } finally {
       setResettingBrandColors(false);
@@ -808,7 +870,8 @@ export default function Home() {
       setNotice(
         error instanceof Error
           ? error.message
-          : "Unable to save governed recipe."
+          : "Unable to save governed recipe.",
+        { tone: "error" }
       );
     }
   }
@@ -853,7 +916,8 @@ export default function Home() {
       setNotice(
         error instanceof Error
           ? error.message
-          : "Unable to delete governed recipe."
+          : "Unable to delete governed recipe.",
+        { tone: "error" }
       );
     }
   }
@@ -867,7 +931,7 @@ export default function Home() {
 
     setIngestingSources(true);
     setNotice("");
-    resetGeneratedDeck();
+    markGeneratedDeckStale();
 
     try {
       const documents = await Promise.all(
@@ -892,7 +956,8 @@ export default function Home() {
       );
     } catch (error) {
       setNotice(
-        error instanceof Error ? error.message : "Unable to ingest source files."
+        error instanceof Error ? error.message : "Unable to ingest source files.",
+        { tone: "error" }
       );
     } finally {
       setIngestingSources(false);
@@ -902,7 +967,7 @@ export default function Home() {
   function handleClearSourcePack() {
     setSourceDocuments([]);
     setSourceNotes("");
-    resetGeneratedDeck();
+    markGeneratedDeckStale();
     setNotice(
       "Source context cleared. The next deck will use business data and prompt evidence only."
     );
@@ -1043,7 +1108,8 @@ export default function Home() {
       );
     } catch (error) {
       setNotice(
-        error instanceof Error ? error.message : "Unable to ingest brand assets."
+        error instanceof Error ? error.message : "Unable to ingest brand assets.",
+        { tone: "error" }
       );
     } finally {
       setAssetUploading(false);
@@ -1083,7 +1149,8 @@ export default function Home() {
       setNotice("Brand asset role approved and preflight refreshed.");
     } catch (error) {
       setNotice(
-        error instanceof Error ? error.message : "Unable to update brand asset."
+        error instanceof Error ? error.message : "Unable to update brand asset.",
+        { tone: "error" }
       );
     } finally {
       setUpdatingAssetId("");
@@ -1135,7 +1202,8 @@ export default function Home() {
       setNotice(
         error instanceof Error
           ? error.message
-          : "Unable to promote template asset."
+          : "Unable to promote template asset.",
+        { tone: "error" }
       );
     } finally {
       setPromotingTemplateAssetEntry("");
@@ -1198,7 +1266,8 @@ export default function Home() {
       );
     } catch (error) {
       setNotice(
-        error instanceof Error ? error.message : "Unable to approve frame map."
+        error instanceof Error ? error.message : "Unable to approve frame map.",
+        { tone: "error" }
       );
     } finally {
       setApprovingFrameMap(false);
@@ -1250,7 +1319,8 @@ export default function Home() {
       );
     } catch (error) {
       setNotice(
-        error instanceof Error ? error.message : "Unable to update frame map."
+        error instanceof Error ? error.message : "Unable to update frame map.",
+        { tone: "error" }
       );
     } finally {
       setUpdatingFrameMapLayoutId("");
@@ -1362,6 +1432,7 @@ export default function Home() {
     setAccuracyAudit(accuracy);
     setFitAudit(fit);
     setExportCertificate(null);
+    setInputsStale(false);
     setFollowUpQuestions((result.followUpQuestions ?? []).slice(0, 4));
 
     if (templateKit) {
@@ -1516,6 +1587,18 @@ export default function Home() {
     // Guard: onClick passes the click event; only honor real string overrides.
     const promptText =
       typeof promptOverride === "string" ? promptOverride : prompt;
+    // Snapshot the last validated deck so a failed regenerate can restore it
+    // instead of leaving the creator with nothing.
+    const previousDeck = deckPlan
+      ? {
+          deckPlan,
+          validationReport,
+          accuracyAudit,
+          fitAudit,
+          exportCertificate,
+          followUpQuestions
+        }
+      : null;
     setActiveCreatorStep("export");
     setGenerating(true);
     setPreparingExport(true);
@@ -1525,14 +1608,31 @@ export default function Home() {
     try {
       const generation = await buildValidatedDeckPlan(promptText);
       const message = await prepareGeneratedDeckForExport(generation);
-      setNotice(message);
+      const stageLines = (generation.agentTrace ?? [])
+        .map(
+          (entry) => `${entry.agentId.replace(/_/g, " ")} - ${entry.status}`
+        )
+        .join("\n");
+      setNotice(message, {
+        details: stageLines ? `Planning stages\n${stageLines}` : ""
+      });
     } catch (error) {
-      setDeckPlan(null);
-      setFollowUpQuestions([]);
-      setValidationReport(null);
-      setAccuracyAudit(null);
-      setFitAudit(null);
-      setExportCertificate(null);
+      if (previousDeck) {
+        setDeckPlan(previousDeck.deckPlan);
+        setValidationReport(previousDeck.validationReport);
+        setAccuracyAudit(previousDeck.accuracyAudit);
+        setFitAudit(previousDeck.fitAudit);
+        setExportCertificate(previousDeck.exportCertificate);
+        setFollowUpQuestions(previousDeck.followUpQuestions);
+        setInputsStale(true);
+      } else {
+        setDeckPlan(null);
+        setFollowUpQuestions([]);
+        setValidationReport(null);
+        setAccuracyAudit(null);
+        setFitAudit(null);
+        setExportCertificate(null);
+      }
 
       // Keep the visible message short and human; move any long or technical
       // text into the collapsible details section.
@@ -1543,10 +1643,13 @@ export default function Home() {
           ? ((error as Error & { details?: string }).details ?? "")
           : "";
       const isWordy = rawMessage.length > 200;
+      const keptDeckSuffix = previousDeck
+        ? " Your last validated deck is still shown below."
+        : "";
       setNotice(
-        isWordy
+        (isWordy
           ? "BrandDeck's automated review stopped this draft before export. Generating again usually resolves it - each pass replans the deck."
-          : rawMessage,
+          : rawMessage) + keptDeckSuffix,
         {
           tone: "error",
           details: [isWordy ? rawMessage : "", serverDetails]
@@ -1719,7 +1822,8 @@ export default function Home() {
       setNotice("Template frame map exported for governed rendering.");
     } catch (error) {
       setNotice(
-        error instanceof Error ? error.message : "Unable to export frame map."
+        error instanceof Error ? error.message : "Unable to export frame map.",
+        { tone: "error" }
       );
     } finally {
       setExportingFrameMap(false);
@@ -1768,7 +1872,8 @@ export default function Home() {
       setNotice(
         error instanceof Error
           ? error.message
-          : "Unable to export brand kit manifest."
+          : "Unable to export brand kit manifest.",
+        { tone: "error" }
       );
     } finally {
       setExportingManifest(false);
@@ -1819,7 +1924,8 @@ export default function Home() {
       setNotice(
         error instanceof Error
           ? error.message
-          : "Unable to export template object map."
+          : "Unable to export template object map.",
+        { tone: "error" }
       );
     } finally {
       setExportingObjectMap(false);
@@ -1869,7 +1975,8 @@ export default function Home() {
       );
     } catch (error) {
       setNotice(
-        error instanceof Error ? error.message : "Unable to import object map."
+        error instanceof Error ? error.message : "Unable to import object map.",
+        { tone: "error" }
       );
     } finally {
       setImportingObjectMap(false);
@@ -1914,7 +2021,8 @@ export default function Home() {
       );
     } catch (error) {
       setNotice(
-        error instanceof Error ? error.message : "Unable to reset object map."
+        error instanceof Error ? error.message : "Unable to reset object map.",
+        { tone: "error" }
       );
     } finally {
       setResettingObjectMap(false);
@@ -1965,7 +2073,8 @@ export default function Home() {
       setNotice(
         error instanceof Error
           ? error.message
-          : "Unable to export clone starter."
+          : "Unable to export clone starter.",
+        { tone: "error" }
       );
     } finally {
       setExportingCloneStarter(false);
@@ -2071,12 +2180,14 @@ export default function Home() {
               {workspaceView === "generate" && (
                 <Button
                   variant="secondary"
-                  className="w-full shrink-0 sm:w-auto"
-                  onClick={handleStartOver}
+                  className={`w-full shrink-0 sm:w-auto ${
+                    confirmStartOver ? "border-brand-orange text-brand-orange" : ""
+                  }`}
+                  onClick={handleStartOverRequest}
                   disabled={workflowBusy}
                 >
                   <RotateCcw className="h-4 w-4" />
-                  Start Over
+                  {confirmStartOver ? "Confirm Start Over" : "Start Over"}
                 </Button>
               )}
             </div>
@@ -2264,7 +2375,7 @@ export default function Home() {
                             maxLength={1000}
                             onChange={(event) => {
                               setPrompt(event.target.value);
-                              resetGeneratedDeck();
+                              markGeneratedDeckStale();
                             }}
                             className="min-h-[168px]"
                           />
@@ -2305,7 +2416,7 @@ export default function Home() {
                       customRecipes={customRecipes}
                       onSelectedRecipeIdChange={(recipeId) => {
                         setSelectedRecipeId(recipeId);
-                        resetGeneratedDeck();
+                        markGeneratedDeckStale();
                       }}
                     />
                   </div>
@@ -2359,7 +2470,7 @@ export default function Home() {
                       onSourceUpload={handleSourceUpload}
                       onSourceNotesChange={(value) => {
                         setSourceNotes(value);
-                        resetGeneratedDeck();
+                        markGeneratedDeckStale();
                       }}
                       onClearSources={handleClearSourcePack}
                     />
@@ -2371,13 +2482,22 @@ export default function Home() {
                       >
                         Back to Brief
                       </Button>
-                      <Button
-                        onClick={() => setActiveCreatorStep("export")}
-                        disabled={!dataReady}
-                      >
-                        Continue to Generate
-                        <ArrowRight className="h-4 w-4" />
-                      </Button>
+                      <div className="flex flex-col items-stretch gap-1 md:items-end">
+                        <Button
+                          onClick={() => setActiveCreatorStep("export")}
+                          disabled={!dataReady}
+                        >
+                          Continue to Generate
+                          <ArrowRight className="h-4 w-4" />
+                        </Button>
+                        {!dataReady && (
+                          <p className="text-xs font-semibold leading-5 text-[#A05A00]">
+                            To continue, drop a BI export, fill the snapshot
+                            (client, period, active users, licensed users,
+                            adoption score), pick a profile, or attach context.
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -2465,7 +2585,9 @@ export default function Home() {
                             {generating || preparingExport || auditingExport
                               ? "Generating Presentation"
                               : deckPlan
-                                ? "Regenerate Presentation"
+                                ? inputsStale
+                                  ? "Regenerate with Updated Inputs"
+                                  : "Regenerate Presentation"
                                 : "Generate Presentation"}
                           </Button>
                         </div>
@@ -2493,6 +2615,16 @@ export default function Home() {
                           busy={generating || preparingExport}
                           onApply={handleApplyFollowUpAnswers}
                         />
+                      )}
+
+                    {deckPlan &&
+                      inputsStale &&
+                      !(generating || preparingExport || auditingExport) && (
+                        <div className="flex items-center gap-2 rounded-md border border-[#FFD3BE] bg-[#FFF7F2] px-4 py-3 text-sm font-semibold text-[#A05A00]">
+                          <AlertTriangle className="h-4 w-4 shrink-0" />
+                          Inputs changed since this deck was generated.
+                          Regenerate to refresh it before exporting.
+                        </div>
                       )}
 
                     {deckPlan && (
@@ -2524,6 +2656,7 @@ export default function Home() {
             brandPreflight={brandPreflight}
             templateGovernance={templateGovernance}
             canExport={canExport}
+            inputsStale={inputsStale}
             generating={generating}
             preparingExport={preparingExport}
             exporting={exporting}

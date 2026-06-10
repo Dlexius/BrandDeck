@@ -1,11 +1,11 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { SourceDocumentSummary } from "@/lib/ui-types";
-import { Lock, Upload } from "lucide-react";
+import { Lock, UploadCloud } from "lucide-react";
 
 export function SourcePackPanel({
   sourceDocuments,
@@ -26,6 +26,8 @@ export function SourcePackPanel({
   const totalCharacters =
     sourceDocuments.reduce((sum, document) => sum + document.characters, 0) +
     sourceNotes.trim().length;
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragActive, setDragActive] = useState(false);
 
   return (
     <Card>
@@ -45,23 +47,66 @@ export function SourcePackPanel({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
-          <div className="rounded-md bg-[#F3F3F3] p-4 ring-1 ring-[#EFEAE5]">
-            <label className="block">
-              <span className="mb-2 block text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
-                Upload Docs
-              </span>
-              <Input
-                type="file"
-                multiple
-                accept=".txt,.md,.markdown,.text,text/plain,text/markdown"
-                disabled={ingestingSources}
-                onChange={(event) => onSourceUpload(event.currentTarget.files)}
-              />
-            </label>
-            <p className="mt-3 text-xs font-semibold leading-5 text-[#787E89]">
-              Useful for meeting notes, briefs, transcripts, and source excerpts
-              that are not yet connected.
+          <div
+            role="button"
+            tabIndex={ingestingSources ? -1 : 0}
+            aria-disabled={ingestingSources}
+            onClick={() => {
+              if (!ingestingSources) {
+                inputRef.current?.click();
+              }
+            }}
+            onKeyDown={(event) => {
+              if (
+                !ingestingSources &&
+                (event.key === "Enter" || event.key === " ")
+              ) {
+                event.preventDefault();
+                inputRef.current?.click();
+              }
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              if (!ingestingSources) {
+                setDragActive(true);
+              }
+            }}
+            onDragLeave={() => setDragActive(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragActive(false);
+              if (!ingestingSources) {
+                onSourceUpload(event.dataTransfer.files);
+              }
+            }}
+            className={`flex cursor-pointer flex-col justify-center rounded-md border-2 border-dashed p-4 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-orange ${
+              ingestingSources ? "pointer-events-none opacity-50" : ""
+            } ${
+              dragActive
+                ? "border-brand-orange bg-[#FFF7F2]"
+                : "border-[#D7CABF] bg-[#FCFBFA] hover:border-brand-orange"
+            }`}
+          >
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
+              <UploadCloud className="h-4 w-4 text-brand-orange" />
+              {ingestingSources ? "Reading files..." : "Upload Docs"}
+            </div>
+            <p className="mt-2 text-xs font-semibold leading-5 text-[#787E89]">
+              Drop .txt or .md files here, or click to browse. Useful for
+              meeting notes, briefs, transcripts, and source excerpts.
             </p>
+            <input
+              ref={inputRef}
+              type="file"
+              multiple
+              accept=".txt,.md,.markdown,.text,text/plain,text/markdown"
+              className="hidden"
+              onClick={(event) => event.stopPropagation()}
+              onChange={(event) => {
+                onSourceUpload(event.currentTarget.files);
+                event.currentTarget.value = "";
+              }}
+            />
           </div>
 
           <label className="block">

@@ -186,6 +186,7 @@ export function ValidationPanel({
   brandPreflight,
   templateGovernance,
   canExport,
+  inputsStale = false,
   generating,
   preparingExport,
   exporting,
@@ -200,6 +201,7 @@ export function ValidationPanel({
   brandPreflight: BrandPreflightReport | null;
   templateGovernance: TemplateGovernanceReport | null;
   canExport: boolean;
+  inputsStale?: boolean;
   generating: boolean;
   preparingExport: boolean;
   exporting: boolean;
@@ -209,6 +211,7 @@ export function ValidationPanel({
   onExport: () => void;
 }) {
   const exportChecksRunning = generating || preparingExport || auditingExport;
+  const staleDeck = Boolean(report) && inputsStale;
 
   return (
     <aside className="border-l border-[#E5E0DB] bg-white p-6">
@@ -243,15 +246,25 @@ export function ValidationPanel({
               Ready to export
             </div>
           ) : (
-            <div className="mt-3 flex items-center gap-2 rounded-md bg-[#F3F3F3] px-3 py-2 text-sm font-bold text-[#787E89]">
+            <div
+              className={`mt-3 flex items-center gap-2 rounded-md px-3 py-2 text-sm font-bold ${
+                staleDeck && !exportChecksRunning
+                  ? "bg-[#FFF7F2] text-[#A05A00]"
+                  : "bg-[#F3F3F3] text-[#787E89]"
+              }`}
+            >
               {exportChecksRunning ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
+              ) : staleDeck ? (
+                <AlertTriangle className="h-4 w-4" />
               ) : (
                 <Lock className="h-4 w-4" />
               )}
               {exportChecksRunning
                 ? "Checking export readiness"
-                : "Generate deck to unlock export"}
+                : staleDeck
+                  ? "Inputs changed - regenerate to refresh"
+                  : "Generate deck to unlock export"}
             </div>
           )}
           <Button

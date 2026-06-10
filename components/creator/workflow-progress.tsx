@@ -77,6 +77,10 @@ export function CreatorWorkflowProgress({
             const isLocked =
               (step.id === "context" && !promptReady) ||
               (step.id === "export" && !dataReady);
+            const lockedReason =
+              step.id === "context"
+                ? "Write the presentation request first."
+                : "Add metrics, a client profile, or source context first.";
 
             return (
               <button
@@ -84,6 +88,7 @@ export function CreatorWorkflowProgress({
                 type="button"
                 onClick={() => onStepChange(step.id)}
                 disabled={isLocked}
+                title={isLocked ? lockedReason : undefined}
                 className={`group rounded-md border px-3 py-3 text-left transition duration-300 disabled:cursor-not-allowed disabled:opacity-55 ${
                   isActive
                     ? "border-brand-orange bg-[#FFF7F2] shadow-sm"
