@@ -2,11 +2,26 @@ import pptxgen from "pptxgenjs";
 import JSZip from "jszip";
 import path from "node:path";
 import type {
+  BrandImageSlot,
+  BrandImageSource
+} from "@/lib/brand-image-resolution";
+import type {
   ActionPlanStatus,
   BrandContract,
   DeckPlan,
   DeckSlide
 } from "@/lib/deck-plan-schema";
+
+export type RenderPptxOptions = {
+  /** Governed uploaded images by slot; they always beat bundled assets. */
+  brandImages?: Partial<Record<BrandImageSlot, BrandImageSource>>;
+  /**
+   * True when a non-bundled brand identity is active: bundled demo imagery
+   * and icons are suppressed so another brand's marks can never leak into
+   * the export. Slides render without the missing image instead.
+   */
+  suppressDefaultAssets?: boolean;
+};
 
 const SLIDE_W = 13.333;
 const SLIDE_H = 7.5;
@@ -23,6 +38,22 @@ function applyContractFonts(contract: BrandContract) {
   FONT_HEAD = contract.approved_fonts.heading[0] ?? "Arial";
   FONT_BODY = contract.approved_fonts.body[0] ?? "Arial";
   FONT_MONO = contract.approved_fonts.mono[0] ?? "Courier New";
+}
+
+// Per-render image resolution state, mirroring the font globals above.
+let BRAND_IMAGES: RenderPptxOptions["brandImages"];
+let SUPPRESS_DEFAULT_ASSETS = false;
+
+function applyRenderOptions(options?: RenderPptxOptions) {
+  BRAND_IMAGES = options?.brandImages;
+  SUPPRESS_DEFAULT_ASSETS = Boolean(options?.suppressDefaultAssets);
+}
+
+type ImageSource = { path: string } | { data: string };
+
+/** pptxgenjs accepts either a file path or a data URI. */
+function imageProps(source: ImageSource) {
+  return "data" in source ? { data: source.data } : { path: source.path };
 }
 
 type Deck = ReturnType<typeof createDeck>;
@@ -59,20 +90,34 @@ function assetPath(publicPath?: string) {
   return path.join(process.cwd(), "public", publicPath.replace(/^\//, ""));
 }
 
-function templateAsset(
+function templateImage(
   contract: BrandContract,
-  key:
-    | "wordmark_black"
-    | "wordmark_white"
-    | "hero_photo"
-    | "texture_title"
-    | "texture_agenda"
-) {
-  return assetPath(contract.template_assets?.[key]);
+  key: BrandImageSlot
+): ImageSource | null {
+  const override = BRAND_IMAGES?.[key];
+
+  if (override?.data) {
+    return { data: override.data };
+  }
+
+  if (SUPPRESS_DEFAULT_ASSETS) {
+    return null;
+  }
+
+  const bundledPath = assetPath(contract.template_assets?.[key]);
+  return bundledPath ? { path: bundledPath } : null;
 }
 
-function templateIcon(contract: BrandContract, key: string) {
-  return assetPath(contract.template_assets?.icons[key]);
+function templateIcon(
+  contract: BrandContract,
+  key: string
+): ImageSource | null {
+  if (SUPPRESS_DEFAULT_ASSETS) {
+    return null;
+  }
+
+  const bundledPath = assetPath(contract.template_assets?.icons[key]);
+  return bundledPath ? { path: bundledPath } : null;
 }
 
 function text(value: unknown, fallback = "") {
@@ -145,14 +190,20 @@ function addTemplateChrome(
     fill: { color: hex(contract, isDark ? "primary_orange" : "primary_orange") },
     line: { color: hex(contract, isDark ? "primary_orange" : "primary_orange") }
   });
-  slide.addImage({
-    path: templateAsset(contract, isDark ? "wordmark_white" : "wordmark_black"),
-    x: px(23.46),
-    y: px(1024.5),
-    w: px(244.39),
-    h: px(31.5),
-    altText: `${contract.companyName} wordmark from the approved template`
-  });
+  const chromeWordmark = templateImage(
+    contract,
+    isDark ? "wordmark_white" : "wordmark_black"
+  );
+  if (chromeWordmark) {
+    slide.addImage({
+      ...imageProps(chromeWordmark),
+      x: px(23.46),
+      y: px(1024.5),
+      w: px(244.39),
+      h: px(31.5),
+      altText: `${contract.companyName} wordmark from the approved template`
+    });
+  }
   slide.addText(String(pageNumber).padStart(2, "0"), {
     x: px(1782.67),
     y: px(1040.06),
@@ -338,14 +389,17 @@ function renderTitleSlide(
     fill: { color: hex(contract, "primary_orange") },
     line: { color: hex(contract, "primary_orange") }
   });
-  slide.addImage({
-    path: templateAsset(contract, "texture_title"),
-    x: px(1135.09),
-    y: px(75.45),
-    w: px(788.81),
-    h: px(971.89),
-    altText: `${contract.companyName} approved title texture`
-  });
+  const titleTexture = templateImage(contract, "texture_title");
+  if (titleTexture) {
+    slide.addImage({
+      ...imageProps(titleTexture),
+      x: px(1135.09),
+      y: px(75.45),
+      w: px(788.81),
+      h: px(971.89),
+      altText: `${contract.companyName} approved title texture`
+    });
+  }
   slide.addShape(pptx.ShapeType.hexagon, {
     x: px(1866.13),
     y: px(23.65),
@@ -354,15 +408,18 @@ function renderTitleSlide(
     fill: { color: hex(contract, "black") },
     line: { color: hex(contract, "black") }
   });
-  slide.addImage({
-    path: templateAsset(contract, "hero_photo"),
-    x: px(1135.09),
-    y: px(601.42),
-    w: px(762.79),
-    h: px(445.92),
-    sizing: { type: "cover", x: px(1135.09), y: px(601.42), w: px(762.79), h: px(445.92) },
-    altText: `${contract.companyName} approved template imagery`
-  });
+  const titleHero = templateImage(contract, "hero_photo");
+  if (titleHero) {
+    slide.addImage({
+      ...imageProps(titleHero),
+      x: px(1135.09),
+      y: px(601.42),
+      w: px(762.79),
+      h: px(445.92),
+      sizing: { type: "cover", x: px(1135.09), y: px(601.42), w: px(762.79), h: px(445.92) },
+      altText: `${contract.companyName} approved template imagery`
+    });
+  }
   slide.addText(text(slideDef.fields.deck_label, "CLIENT REPORT").toUpperCase(), {
     x: px(22.12),
     y: px(18.23),
@@ -419,14 +476,17 @@ function renderTitleSlide(
       color: hex(contract, "ink")
     });
   }
-  slide.addImage({
-    path: templateAsset(contract, "wordmark_black"),
-    x: px(22.12),
-    y: px(980.71),
-    w: px(516.88),
-    h: px(66.63),
-    altText: `${contract.companyName} wordmark from the approved template`
-  });
+  const titleWordmark = templateImage(contract, "wordmark_black");
+  if (titleWordmark) {
+    slide.addImage({
+      ...imageProps(titleWordmark),
+      x: px(22.12),
+      y: px(980.71),
+      w: px(516.88),
+      h: px(66.63),
+      altText: `${contract.companyName} wordmark from the approved template`
+    });
+  }
 }
 
 function renderAgenda(
@@ -435,14 +495,17 @@ function renderAgenda(
   contract: BrandContract,
   slideDef: DeckSlide
 ) {
-  slide.addImage({
-    path: templateAsset(contract, "texture_agenda"),
-    x: 0,
-    y: px(448.87),
-    w: px(815.23),
-    h: px(631.13),
-    altText: `${contract.companyName} approved agenda texture`
-  });
+  const agendaTexture = templateImage(contract, "texture_agenda");
+  if (agendaTexture) {
+    slide.addImage({
+      ...imageProps(agendaTexture),
+      x: 0,
+      y: px(448.87),
+      w: px(815.23),
+      h: px(631.13),
+      altText: `${contract.companyName} approved agenda texture`
+    });
+  }
   const items = arrayField<string>(slideDef.fields.agenda_items).slice(0, 6);
   // Vertically center the agenda block so short agendas don't bunch at the top.
   const itemSpacing = 128;
@@ -526,11 +589,11 @@ function renderPhotoSectionDivider(
   // itself are renderer-owned; the plan only supplies the words.
   addBackground(pptx, slide, contract, "dark");
   const photoX = px(1108.56);
-  const heroPath = templateAsset(contract, "hero_photo");
+  const dividerHero = templateImage(contract, "hero_photo");
 
-  if (heroPath) {
+  if (dividerHero) {
     slide.addImage({
-      path: heroPath,
+      ...imageProps(dividerHero),
       x: photoX,
       y: 0,
       w: SLIDE_W - photoX,
@@ -592,14 +655,17 @@ function renderPhotoSectionDivider(
     fit: "shrink",
     valign: "top"
   });
-  slide.addImage({
-    path: templateAsset(contract, "wordmark_white"),
-    x: px(23.46),
-    y: px(1024.5),
-    w: px(244.39),
-    h: px(31.5),
-    altText: `${contract.companyName} wordmark from the approved template`
-  });
+  const dividerWordmark = templateImage(contract, "wordmark_white");
+  if (dividerWordmark) {
+    slide.addImage({
+      ...imageProps(dividerWordmark),
+      x: px(23.46),
+      y: px(1024.5),
+      w: px(244.39),
+      h: px(31.5),
+      altText: `${contract.companyName} wordmark from the approved template`
+    });
+  }
 }
 
 /**
@@ -858,14 +924,17 @@ function renderScorecard(
       fill: { color: hex(contract, index === 0 ? "warm_sand" : "light_gray") },
       line: { color: hex(contract, "stone"), width: 0.55 }
     });
-    slide.addImage({
-      path: templateIcon(contract, iconKey),
-      x: x + 0.28,
-      y: y + 0.32,
-      w: 0.34,
-      h: 0.34,
-      altText: `${label} approved template icon`
-    });
+    const cardIcon = templateIcon(contract, iconKey);
+    if (cardIcon) {
+      slide.addImage({
+        ...imageProps(cardIcon),
+        x: x + 0.28,
+        y: y + 0.32,
+        w: 0.34,
+        h: 0.34,
+        altText: `${label} approved template icon`
+      });
+    }
     addLabel(slide, contract, label, x + 0.75, y + 0.35, {
       colorToken: "ink",
       w: w - 1.2
@@ -1056,14 +1125,17 @@ function renderFeatureAdoption(
         : metric.feature === "Daily Logs"
           ? "reporting"
           : "data";
-    slide.addImage({
-      path: templateIcon(contract, iconKey),
-      x: px(292),
-      y: y - 0.08,
-      w: 0.24,
-      h: 0.24,
-      altText: `${metric.feature} approved template icon`
-    });
+    const featureIcon = templateIcon(contract, iconKey);
+    if (featureIcon) {
+      slide.addImage({
+        ...imageProps(featureIcon),
+        x: px(292),
+        y: y - 0.08,
+        w: 0.24,
+        h: 0.24,
+        altText: `${metric.feature} approved template icon`
+      });
+    }
     addBodyCopy(slide, contract, metric.feature, px(345), y, px(210), px(34), {
       fontSize: 9,
       bold: true
@@ -1148,14 +1220,20 @@ function renderRisks(
   const iconKeys = ["warning", "insights", "project_management"];
   recommendations.forEach((recommendation, index) => {
     const x = columnXs[index];
-    slide.addImage({
-      path: templateIcon(contract, iconKeys[index % iconKeys.length]),
-      x,
-      y: px(430),
-      w: px(96),
-      h: px(96),
-      altText: "Recommendation icon from the approved brand template"
-    });
+    const recommendationIcon = templateIcon(
+      contract,
+      iconKeys[index % iconKeys.length]
+    );
+    if (recommendationIcon) {
+      slide.addImage({
+        ...imageProps(recommendationIcon),
+        x,
+        y: px(430),
+        w: px(96),
+        h: px(96),
+        altText: "Recommendation icon from the approved brand template"
+      });
+    }
     addLabel(slide, contract, `Point 0${index + 1}`, x, px(596));
     addBodyCopy(slide, contract, recommendation, x, px(636), px(514.33), px(260), {
       fontSize: 13,
@@ -1363,9 +1441,11 @@ function addSpeakerNotes(slide: Slide, slideDef: DeckSlide) {
 
 export async function renderPptx(
   deckPlan: DeckPlan,
-  brandContract: BrandContract
+  brandContract: BrandContract,
+  options?: RenderPptxOptions
 ): Promise<Buffer> {
   applyContractFonts(brandContract);
+  applyRenderOptions(options);
   const pptx = createDeck(brandContract, deckPlan);
 
   deckPlan.slides.forEach((slideDef, index) => {

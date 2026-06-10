@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getActiveBrandContract } from "@/lib/brand-contract-store";
+import { resolveGovernedBrandImages } from "@/lib/brand-image-resolution";
 import { auditDeckFit } from "@/lib/auditDeckFit";
 import { DeckPlanSchema } from "@/lib/deck-plan-schema";
 import {
@@ -65,7 +66,14 @@ export async function POST(request: Request) {
       );
     }
 
-    let pptxBuffer = await renderPptx(deckPlan, brandContract);
+    // White-label: governed uploaded imagery beats bundled demo assets, and
+    // once another brand's identity is active the bundled marks are
+    // suppressed entirely rather than leaking into the export.
+    const resolvedImages = resolveGovernedBrandImages();
+    let pptxBuffer = await renderPptx(deckPlan, brandContract, {
+      brandImages: resolvedImages.images,
+      suppressDefaultAssets: resolvedImages.identityOverridden
+    });
 
     // Embed the approved brand fonts from the uploaded template so the deck
     // renders identically on machines that do not have the fonts installed.

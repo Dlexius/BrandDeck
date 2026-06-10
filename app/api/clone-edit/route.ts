@@ -9,6 +9,7 @@ import { DeckPlanSchema } from "@/lib/deck-plan-schema";
 import { auditPptxPackage } from "@/lib/pptx-package-audit";
 import { buildTemplateEditGovernance } from "@/lib/template-edit-manifest";
 import {
+  appendStaticSlidesToArtifact,
   buildTemplateFrameMapArtifact,
   getTemplateKit
 } from "@/lib/template-kit-store";
@@ -75,9 +76,23 @@ export async function POST(request: Request) {
     }
 
     const frameMapArtifact = buildTemplateFrameMapArtifact(templateKit, deckPlan);
+    // Governance scores the planned slides only; static includes append after.
     const editGovernance = buildTemplateEditGovernance(
       templateKit,
       frameMapArtifact
+    );
+
+    // Creator-selected static slides (legal pages, fixed visuals) append
+    // after the planned deck; only admin-marked slides are honored.
+    const requestedStaticSlides = Array.isArray(body.staticSlideNumbers)
+      ? body.staticSlideNumbers
+          .map((value: unknown) => Number(value))
+          .filter((value: number) => Number.isInteger(value))
+      : [];
+    const appendedStaticSlides = appendStaticSlidesToArtifact(
+      frameMapArtifact,
+      templateKit,
+      requestedStaticSlides
     );
     const bindingAudit = auditCloneEditBindings({
       templateKit,
@@ -150,6 +165,7 @@ export async function POST(request: Request) {
         "X-BrandDeck-Brand-Validation-Score": String(
           validationReport.complianceScore
         ),
+        "X-BrandDeck-Static-Slides": String(appendedStaticSlides.length),
         "X-BrandDeck-Package-Audit": packageAudit.passed ? "passed" : "needs_review",
         "X-BrandDeck-Referenced-Slides": String(packageAudit.referencedSlideCount),
         "X-BrandDeck-Missing-Relationships": String(

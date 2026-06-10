@@ -118,6 +118,10 @@ The folder is intentionally ignored by git because it may contain customer templ
 
 ## Future Integrations
 
+- NotebookLM Enterprise: `lib/connectors/notebooklm-adapter.ts` is a typed scaffold for sources.batchCreate / uploadFile and grounded notebook queries with citations; answers become bounded SourceDocuments in the context pack once `NOTEBOOKLM_PROJECT_ID`, `NOTEBOOKLM_LOCATION`, and `NOTEBOOKLM_NOTEBOOK_ID` plus service-account credentials are configured.
+- Generated visuals (explainer imagery): image generation must enter through the governed asset pipeline, never the planner. The intended flow is an admin Brand Settings action that calls an image API (e.g. OpenAI `gpt-image-1`), drops the result into the brand-asset inventory with a role and `needs_admin_label` status, and only after admin approval can the deterministic renderer place it - the same drift guards as uploaded assets. Slide generation itself never requests or chooses imagery.
+
+
 - Salesforce: pull account, opportunity, renewal, and adoption-health fields into the business-data adapter layer.
 - Business systems: enrich account snapshots with product activity, workflow health, renewal, support, and BI data.
 - Cloud drives: extend the source connector pattern to OneDrive, Dropbox, Box, and SharePoint.

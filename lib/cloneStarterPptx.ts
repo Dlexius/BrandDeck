@@ -1147,6 +1147,17 @@ export function auditCloneEditBindings({
   const checks: CloneEditBindingAudit["checks"] = [];
 
   frameMapArtifact.outputSlides.forEach((mapping, index) => {
+    // Admin static includes clone verbatim - no plan content, no bindings.
+    if (mapping.staticInclude) {
+      checks.push({
+        id: `slide-${mapping.outputSlide}:static-include`,
+        label: "Static slide include",
+        passed: true,
+        detail: `Admin-approved template slide ${mapping.sourceSlide} is cloned verbatim.`
+      });
+      return;
+    }
+
     const slide = deckPlan.slides[index];
     const targets = slide
       ? targetsForLayout(slide.layout_id, templateKit).filter(

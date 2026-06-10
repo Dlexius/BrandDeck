@@ -51,6 +51,15 @@ export type TemplateFrameMapOverride = {
   sourceSlide: number;
 };
 
+/**
+ * Admin-marked template slides that ship verbatim (legal pages, fixed
+ * visuals). Creators opt in per deck; the clone path appends them unchanged.
+ */
+export type TemplateStaticSlide = {
+  sourceSlide: number;
+  label: string;
+};
+
 export type TemplateFrameMap = {
   mode: "template-following";
   rendererIntent: "clone-edit";
@@ -85,6 +94,8 @@ export type TemplateFrameMapArtifact = {
     confidence: number;
     evidence: string[];
     editTargets: string[];
+    /** Cloned verbatim with no plan-driven edits (admin static include). */
+    staticInclude?: boolean;
   }>;
   omittedSourceSlides: TemplateFrameMap["omittedSourceSlides"];
   validation: {
@@ -112,6 +123,7 @@ export type TemplateKit = {
   topAssets: TemplateKitAsset[];
   sourceSlides: TemplateSourceSlide[];
   frameMap: TemplateFrameMap;
+  staticSlides: TemplateStaticSlide[];
   driftGuards: {
     templateFingerprintLocked: boolean;
     frameMapRequired: boolean;
@@ -170,6 +182,8 @@ function hydrateTemplateKits(store: TemplateKitGlobal) {
       return [
         {
           ...summary,
+          // Kits persisted before static slides existed default to none.
+          staticSlides: summary.staticSlides ?? [],
           buffer: readRuntimeBuffer(bufferFile)
         }
       ];
@@ -804,6 +818,7 @@ export async function createTemplateKit(templateName: string, buffer: Buffer) {
     topAssets: await summarizeAssets(zip, mediaEntries),
     sourceSlides,
     frameMap: inferTemplateFrameMap(sourceSlides),
+    staticSlides: [],
     driftGuards: {
       templateFingerprintLocked: true,
       frameMapRequired: true,
@@ -832,6 +847,80 @@ export async function createTemplateKit(templateName: string, buffer: Buffer) {
 
 export function getTemplateKit(id: string) {
   return getGlobalStore().kits.get(id);
+}
+
+export function updateTemplateStaticSlides(
+  id: string,
+  staticSlides: Array<{ sourceSlide: unknown; label: unknown }>
+) {
+  const kit = getTemplateKit(id);
+
+  if (!kit) {
+    throw new Error("Template kit not found. Upload a PPTX template first.");
+  }
+
+  const cleaned = staticSlides
+    .map((entry) => ({
+      sourceSlide: Number(entry.sourceSlide),
+      label: String(entry.label ?? "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 80)
+    }))
+    .filter(
+      (entry) =>
+        Number.isInteger(entry.sourceSlide) &&
+        entry.sourceSlide >= 1 &&
+        entry.sourceSlide <= kit.slideCount
+    )
+    .map((entry) => ({
+      ...entry,
+      label: entry.label || `Template slide ${entry.sourceSlide}`
+    }))
+    .slice(0, 12);
+
+  kit.staticSlides = [
+    ...new Map(cleaned.map((entry) => [entry.sourceSlide, entry])).values()
+  ];
+  persistTemplateKits(getGlobalStore());
+
+  return kit;
+}
+
+/**
+ * Append creator-selected static slides to a frame-map artifact. Only slides
+ * the admin marked as static are honored - anything else fails closed by
+ * being ignored. Returns the source slide numbers actually appended.
+ */
+export function appendStaticSlidesToArtifact(
+  artifact: TemplateFrameMapArtifact,
+  kit: TemplateKit,
+  sourceSlideNumbers: number[]
+) {
+  const approved = new Map(
+    (kit.staticSlides ?? []).map((entry) => [entry.sourceSlide, entry])
+  );
+  const requested = [...new Set(sourceSlideNumbers)].filter((sourceSlide) =>
+    approved.has(sourceSlide)
+  );
+
+  requested.forEach((sourceSlide) => {
+    const entry = approved.get(sourceSlide)!;
+
+    artifact.outputSlides.push({
+      outputSlide: artifact.outputSlides.length + 1,
+      sourceSlide,
+      layoutId: "statement",
+      narrativeRole: `static include: ${entry.label}`,
+      reuseMode: "duplicate-slide",
+      confidence: 100,
+      evidence: [`admin_static:${entry.label}`],
+      editTargets: [],
+      staticInclude: true
+    });
+  });
+
+  return requested;
 }
 
 export async function readTemplateMediaAsset(id: string, entry: string) {

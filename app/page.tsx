@@ -128,6 +128,10 @@ export default function Home() {
   const [exporting, setExporting] = useState(false);
   const [approvingFrameMap, setApprovingFrameMap] = useState(false);
   const [updatingFrameMapLayoutId, setUpdatingFrameMapLayoutId] = useState("");
+  const [updatingStaticSlides, setUpdatingStaticSlides] = useState(false);
+  const [selectedStaticSlideNumbers, setSelectedStaticSlideNumbers] = useState<
+    number[]
+  >([]);
   const [promotingTemplateAssetEntry, setPromotingTemplateAssetEntry] = useState("");
   const [templateAssetRoles, setTemplateAssetRoles] = useState<
     Record<string, BrandAssetSummary["role"]>
@@ -519,6 +523,7 @@ export default function Home() {
     setMetricImport(null);
     setSourceDocuments([]);
     setSourceNotes("");
+    setSelectedStaticSlideNumbers([]);
     setActiveGoogleSourceType(null);
     setGoogleDriveQuery("");
     setGoogleDriveResults([]);
@@ -1285,6 +1290,59 @@ export default function Home() {
     }
   }
 
+  async function handleUpdateStaticSlides(
+    staticSlides: Array<{ sourceSlide: number; label: string }>
+  ) {
+    if (!templateKit) {
+      setNotice("Upload a PPTX template before marking static slides.");
+      return;
+    }
+
+    setUpdatingStaticSlides(true);
+    try {
+      const response = await fetch("/api/template-frame-map", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          templateKitId: templateKit.id,
+          action: "set_static_slides",
+          staticSlides
+        })
+      });
+      const result = (await response.json()) as {
+        templateKit?: TemplateKitSummary;
+        error?: string;
+      };
+
+      if (!response.ok || !result.templateKit) {
+        throw new Error(result.error ?? "Unable to update static slides.");
+      }
+
+      setTemplateKit(result.templateKit);
+      // Drop creator selections that no longer exist.
+      const validNumbers = new Set(
+        (result.templateKit.staticSlides ?? []).map((entry) => entry.sourceSlide)
+      );
+      setSelectedStaticSlideNumbers((current) =>
+        current.filter((value) => validNumbers.has(value))
+      );
+      setNotice(
+        `${result.templateKit.staticSlides?.length ?? 0} static slide${
+          (result.templateKit.staticSlides?.length ?? 0) === 1 ? "" : "s"
+        } marked for opt-in include.`
+      );
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "Unable to update static slides.",
+        { tone: "error" }
+      );
+    } finally {
+      setUpdatingStaticSlides(false);
+    }
+  }
+
   async function handleFrameMappingUpdate(layoutId: string, sourceSlide: number) {
     if (!templateKit) {
       return;
@@ -1754,6 +1812,7 @@ export default function Home() {
             deckPlan,
             templateKitId: templateKit?.id,
             frameMap: templateKit?.frameMap,
+            staticSlideNumbers: selectedStaticSlideNumbers,
             fidelityMode: templateKit
               ? "template_clone_edit"
               : "default_coordinate_export"
@@ -2357,10 +2416,12 @@ export default function Home() {
                       exportingCloneStarter={exportingCloneStarter}
                       approvingFrameMap={approvingFrameMap}
                       updatingLayoutId={updatingFrameMapLayoutId}
+                      updatingStaticSlides={updatingStaticSlides}
                       onExportFrameMap={handleExportFrameMap}
                       onExportCloneStarter={handleExportCloneStarter}
                       onApproveFrameMap={handleApproveFrameMap}
                       onUpdateFrameMapping={handleFrameMappingUpdate}
+                      onUpdateStaticSlides={handleUpdateStaticSlides}
                     />
                   </>
                 )}
@@ -2667,6 +2728,65 @@ export default function Home() {
                         </div>
                       </CardContent>
                     </Card>
+
+                    {Boolean(templateKit?.staticSlides?.length) && (
+                      <Card>
+                        <CardContent className="space-y-3">
+                          <div>
+                            <h3 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
+                              Approved Extras
+                            </h3>
+                            <p className="mt-1 text-sm text-[#787E89]">
+                              Admin-approved slides that ship word-for-word at
+                              the end of the deck.
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {(templateKit?.staticSlides ?? []).map((entry) => {
+                              const checked = selectedStaticSlideNumbers.includes(
+                                entry.sourceSlide
+                              );
+
+                              return (
+                                <label
+                                  key={entry.sourceSlide}
+                                  className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition ${
+                                    checked
+                                      ? "border-brand-orange bg-[#FFF7F2] text-brand-charcoal"
+                                      : "border-[#E5E0DB] bg-white text-[#787E89] hover:border-[#D7CABF]"
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    className="accent-[#FF5200]"
+                                    checked={checked}
+                                    onChange={() =>
+                                      setSelectedStaticSlideNumbers((current) =>
+                                        checked
+                                          ? current.filter(
+                                              (value) =>
+                                                value !== entry.sourceSlide
+                                            )
+                                          : [...current, entry.sourceSlide]
+                                      )
+                                    }
+                                  />
+                                  {entry.label}
+                                </label>
+                              );
+                            })}
+                          </div>
+                          {selectedStaticSlideNumbers.length > 0 &&
+                            !templateCloneEditReady && (
+                              <p className="text-xs font-semibold leading-5 text-[#A05A00]">
+                                Static slides ship with template export only.
+                                Finish Brand Settings mapping to include them;
+                                brand-layout exports skip them.
+                              </p>
+                            )}
+                        </CardContent>
+                      </Card>
+                    )}
 
                     {(generating || preparingExport || auditingExport) && (
                       <GenerationProgress />

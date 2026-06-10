@@ -91,6 +91,10 @@ export type TemplateKitSummary = {
       approvedBy?: string;
     };
   };
+  staticSlides?: Array<{
+    sourceSlide: number;
+    label: string;
+  }>;
   driftGuards: {
     templateFingerprintLocked: boolean;
     frameMapRequired: boolean;

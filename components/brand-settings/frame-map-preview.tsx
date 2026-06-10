@@ -1,9 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import type { TemplateKitSummary } from "@/lib/ui-types";
-import { AlertTriangle, CheckCircle2, Download, FileArchive, Loader2, Lock, ShieldCheck, Upload } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, FileArchive, Loader2, Lock, ShieldCheck, Upload, X } from "lucide-react";
 
 export function FrameMapPreview({
   templateKit,
@@ -11,21 +12,29 @@ export function FrameMapPreview({
   exportingCloneStarter,
   approvingFrameMap,
   updatingLayoutId,
+  updatingStaticSlides,
   onExportFrameMap,
   onExportCloneStarter,
   onApproveFrameMap,
-  onUpdateFrameMapping
+  onUpdateFrameMapping,
+  onUpdateStaticSlides
 }: {
   templateKit: TemplateKitSummary | null;
   exportingFrameMap: boolean;
   exportingCloneStarter: boolean;
   approvingFrameMap: boolean;
   updatingLayoutId: string;
+  updatingStaticSlides: boolean;
   onExportFrameMap: () => void;
   onExportCloneStarter: () => void;
   onApproveFrameMap: () => void;
   onUpdateFrameMapping: (layoutId: string, sourceSlide: number) => void;
+  onUpdateStaticSlides: (
+    slides: Array<{ sourceSlide: number; label: string }>
+  ) => void;
 }) {
+  const [staticSlideNumber, setStaticSlideNumber] = useState("");
+  const [staticSlideLabel, setStaticSlideLabel] = useState("");
   if (!templateKit) {
     return (
       <Card>
@@ -178,6 +187,103 @@ export function FrameMapPreview({
               </div>
             </div>
           ))}
+        </div>
+
+        <div className="border-t border-[#E5E0DB] pt-4">
+          <h3 className="text-xs font-bold uppercase tracking-[0.08em] text-brand-charcoal">
+            Static Slides
+          </h3>
+          <p className="mt-1 text-xs font-semibold leading-5 text-[#787E89]">
+            Mark template slides that ship word-for-word when a creator opts in
+            - legal pages, fixed diagrams, brand statements. They are cloned
+            verbatim; generation never edits them.
+          </p>
+
+          {(templateKit.staticSlides ?? []).length > 0 && (
+            <div className="mt-3 space-y-2">
+              {(templateKit.staticSlides ?? []).map((entry) => (
+                <div
+                  key={entry.sourceSlide}
+                  className="flex items-center justify-between gap-3 rounded-md bg-white px-3 py-2 ring-1 ring-[#EFEAE5]"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-brand-charcoal">
+                      {entry.label}
+                    </p>
+                    <p className="font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-[#787E89]">
+                      Source slide {String(entry.sourceSlide).padStart(3, "0")}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-[#787E89] transition hover:bg-[#F3F3F3] hover:text-brand-charcoal disabled:opacity-50"
+                    disabled={updatingStaticSlides}
+                    aria-label={`Remove static slide ${entry.label}`}
+                    onClick={() =>
+                      onUpdateStaticSlides(
+                        (templateKit.staticSlides ?? []).filter(
+                          (item) => item.sourceSlide !== entry.sourceSlide
+                        )
+                      )
+                    }
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-[120px_minmax(0,1fr)_auto]">
+            <input
+              type="number"
+              min={1}
+              max={templateKit.slideCount}
+              value={staticSlideNumber}
+              disabled={updatingStaticSlides}
+              onChange={(event) => setStaticSlideNumber(event.target.value)}
+              placeholder="Slide #"
+              className="h-9 rounded-sm border border-[#D7CABF] bg-white px-2 font-mono text-xs font-black text-brand-charcoal outline-none transition focus:border-brand-orange"
+            />
+            <input
+              type="text"
+              maxLength={80}
+              value={staticSlideLabel}
+              disabled={updatingStaticSlides}
+              onChange={(event) => setStaticSlideLabel(event.target.value)}
+              placeholder="Label, e.g. Legal disclaimer"
+              className="h-9 rounded-sm border border-[#D7CABF] bg-white px-2 text-xs font-semibold text-brand-charcoal outline-none transition focus:border-brand-orange"
+            />
+            <Button
+              variant="secondary"
+              className="h-9 px-3"
+              disabled={
+                updatingStaticSlides ||
+                !Number.isInteger(Number(staticSlideNumber)) ||
+                Number(staticSlideNumber) < 1 ||
+                Number(staticSlideNumber) > templateKit.slideCount
+              }
+              onClick={() => {
+                onUpdateStaticSlides([
+                  ...(templateKit.staticSlides ?? []),
+                  {
+                    sourceSlide: Number(staticSlideNumber),
+                    label:
+                      staticSlideLabel.trim() ||
+                      `Template slide ${staticSlideNumber}`
+                  }
+                ]);
+                setStaticSlideNumber("");
+                setStaticSlideLabel("");
+              }}
+            >
+              {updatingStaticSlides ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                "Mark Static"
+              )}
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

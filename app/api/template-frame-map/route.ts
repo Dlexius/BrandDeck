@@ -10,7 +10,8 @@ import {
   buildTemplateFrameMapArtifact,
   getTemplateKit,
   summarizeTemplateKit,
-  updateTemplateFrameMapOverrides
+  updateTemplateFrameMapOverrides,
+  updateTemplateStaticSlides
 } from "@/lib/template-kit-store";
 
 export const runtime = "nodejs";
@@ -36,6 +37,17 @@ export async function PATCH(request: Request) {
     const body = await request.json();
     const templateKitId =
       typeof body.templateKitId === "string" ? body.templateKitId : "";
+
+    if (body.action === "set_static_slides") {
+      const kit = updateTemplateStaticSlides(
+        templateKitId,
+        Array.isArray(body.staticSlides) ? body.staticSlides : []
+      );
+
+      return NextResponse.json({
+        templateKit: summarizeTemplateKit(kit)
+      });
+    }
 
     if (body.action === "approve") {
       const templateKit = getTemplateKit(templateKitId);
