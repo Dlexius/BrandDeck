@@ -11,6 +11,7 @@ import { FrameMapPreview } from "@/components/brand-settings/frame-map-preview";
 import { SettingsSectionNav } from "@/components/brand-settings/settings-nav";
 import { TemplateAssetLibrary } from "@/components/brand-settings/template-asset-library";
 import { TemplateGovernancePanel } from "@/components/brand-settings/template-governance-panel";
+import { TextFieldMappingWalkthrough } from "@/components/brand-settings/text-field-mapping-walkthrough";
 import { TemplateOnboardingWorkbench } from "@/components/brand-settings/template-onboarding-workbench";
 import { BusinessDataCard } from "@/components/creator/business-data-card";
 import { ClientProfilePanel } from "@/components/creator/client-profile-panel";
@@ -33,13 +34,16 @@ import { DeckRecipe, approvedDeckRecipes } from "@/lib/deck-recipes";
 import { AdoptionCsvRow } from "@/lib/generateDeckPlan";
 import { CLIENT_PROFILES, DEFAULT_PROMPT, DEFAULT_RECIPE_BUILDER, EMPTY_BUSINESS_SNAPSHOT, EXAMPLE_BUSINESS_SNAPSHOT, MAX_ADMIN_RECIPE_LAYOUTS, defaultBrandContract } from "@/lib/ui-constants";
 import { brandColorTokenLabel, businessSnapshotToRows, createSourceDocument, isHexColor, mergeSourceDocuments, recipeFromBuilder, safeDownloadFileName } from "@/lib/ui-helpers";
-import type { BrandAssetSummary, BrandContractApiResponse, BrandPreflightReport, BusinessSnapshotState, CreatorWorkflowStep, ExportCertificate, GeneratePlanApiResponse, GoogleDriveConnectorStatus, GoogleDriveFileOption, GoogleDriveImportResponse, GoogleWorkspaceSourceType, RecipeBuilderState, SettingsSection, SourceDocumentSummary, TemplateGovernanceReport, TemplateKitSummary, WorkspaceView } from "@/lib/ui-types";
+import type { BrandAssetSummary, BrandContractApiResponse, BrandPreflightReport, BusinessSnapshotState, CreatorWorkflowStep, ExportCertificate, GeneratePlanApiResponse, GoogleDriveConnectorStatus, GoogleDriveFileOption, GoogleDriveImportResponse, GoogleWorkspaceSourceType, RecipeBuilderState, SettingsSection, SourceDocumentSummary, TemplateGovernanceReport, TemplateKitSummary, TemplateTextFieldSlide, TemplateTextFieldTargetDraft, TemplateTextFieldsApiResponse, WorkspaceView } from "@/lib/ui-types";
 import { ValidationReport, validateDeckPlan } from "@/lib/validateDeckPlan";
 import { AlertTriangle, ArrowRight, Loader2, Lock, RotateCcw, Sparkles } from "lucide-react";
 
 export default function Home() {
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [selectedRecipeId, setSelectedRecipeId] = useState("auto");
+  // Creator-deselected slides for the chosen deck type; cleared whenever the
+  // deck type changes so a stale deselection never leaks across deck types.
+  const [deselectedSlideRoles, setDeselectedSlideRoles] = useState<string[]>([]);
   const [customRecipes, setCustomRecipes] = useState<DeckRecipe[]>([]);
   const [recipeBuilder, setRecipeBuilder] =
     useState<RecipeBuilderState>(DEFAULT_RECIPE_BUILDER);
@@ -125,6 +129,12 @@ export default function Home() {
   const [exportingObjectMap, setExportingObjectMap] = useState(false);
   const [importingObjectMap, setImportingObjectMap] = useState(false);
   const [resettingObjectMap, setResettingObjectMap] = useState(false);
+  const [templateTextFields, setTemplateTextFields] = useState<
+    TemplateTextFieldSlide[] | null
+  >(null);
+  const [loadingTemplateTextFields, setLoadingTemplateTextFields] =
+    useState(false);
+  const [savingTextFieldMapping, setSavingTextFieldMapping] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [approvingFrameMap, setApprovingFrameMap] = useState(false);
   const [updatingFrameMapLayoutId, setUpdatingFrameMapLayoutId] = useState("");
@@ -516,6 +526,7 @@ export default function Home() {
     refiningPromptRef.current = false;
     setPrompt(DEFAULT_PROMPT);
     setSelectedRecipeId("auto");
+    setDeselectedSlideRoles([]);
     setSelectedClientProfileId("");
     setClientProfileContext("");
     setBusinessSnapshot(EMPTY_BUSINESS_SNAPSHOT);
@@ -698,6 +709,7 @@ export default function Home() {
     }
 
     setSelectedRecipeId("auto");
+    setDeselectedSlideRoles([]);
     applyBusinessSnapshot(
       EXAMPLE_BUSINESS_SNAPSHOT,
       promptIsCustom
@@ -879,6 +891,7 @@ export default function Home() {
 
       setCustomRecipes(result.recipes ?? []);
       setSelectedRecipeId(result.recipe.recipe_id);
+      setDeselectedSlideRoles([]);
       setNotice(
         `${result.recipe.name} saved as an admin-governed recipe with ${result.recipe.slide_sequence.length} approved layouts.`
       );
@@ -916,6 +929,7 @@ export default function Home() {
 
       if (selectedRecipeId === recipeId) {
         setSelectedRecipeId("auto");
+        setDeselectedSlideRoles([]);
       }
 
       setDeckPlan(null);
@@ -1067,6 +1081,7 @@ export default function Home() {
       }
 
       setTemplateKit(result);
+      setTemplateTextFields(null);
       await refreshTemplateGovernance(result.id, deckPlan);
       await refreshBrandPreflight(result.id, deckPlan);
       setTemplateStatus(
@@ -1077,6 +1092,7 @@ export default function Home() {
       );
     } catch (error) {
       setTemplateKit(null);
+      setTemplateTextFields(null);
       setTemplateGovernance(null);
       setBrandPreflight(null);
       setTemplateStatus(
@@ -1378,6 +1394,8 @@ export default function Home() {
       }
 
       setTemplateKit(result.templateKit);
+      // Mapped source slides changed, so the walkthrough must re-read them.
+      setTemplateTextFields(null);
       await refreshTemplateGovernance(result.templateKit.id, deckPlan);
       await refreshBrandPreflight(result.templateKit.id, deckPlan);
       setNotice(
@@ -1470,6 +1488,8 @@ export default function Home() {
         csvRows: rows,
         contextPack,
         recipeId: selectedRecipeId === "auto" ? undefined : selectedRecipeId,
+        excludedSlideRoles:
+          selectedRecipeId === "auto" ? [] : deselectedSlideRoles,
         customRecipes,
         sourceDocuments: sourcePack
       })
@@ -2113,6 +2133,97 @@ export default function Home() {
     }
   }
 
+  async function handleLoadTemplateTextFields() {
+    if (!templateKit) {
+      return;
+    }
+
+    setLoadingTemplateTextFields(true);
+
+    try {
+      const response = await fetch("/api/template-text-fields", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ templateKitId: templateKit.id })
+      });
+      const result = (await response.json()) as TemplateTextFieldsApiResponse;
+
+      if (!response.ok || !result.slides) {
+        throw new Error(result.error ?? "Unable to read template text fields.");
+      }
+
+      setTemplateTextFields(result.slides);
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "Unable to read template text fields.",
+        { tone: "error" }
+      );
+    } finally {
+      setLoadingTemplateTextFields(false);
+    }
+  }
+
+  async function handleSaveTextFieldMapping(
+    targets: TemplateTextFieldTargetDraft[]
+  ): Promise<boolean> {
+    if (!templateKit) {
+      return false;
+    }
+
+    setSavingTextFieldMapping(true);
+    setNotice("");
+    setExportCertificate(null);
+
+    try {
+      const response = await fetch("/api/template-object-map", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          templateKitId: templateKit.id,
+          objectMap: { targets },
+          deckPlan,
+          importedBy: "Brand admin"
+        })
+      });
+      const result = (await response.json()) as {
+        bindingSet?: {
+          targets: unknown[];
+        };
+        governance?: TemplateGovernanceReport;
+        error?: string;
+      };
+
+      if (!response.ok || !result.governance || !result.bindingSet) {
+        throw new Error(result.error ?? "Unable to save the text field mapping.");
+      }
+
+      setTemplateGovernance(result.governance);
+      await refreshBrandPreflight(templateKit.id, deckPlan);
+      setNotice(
+        `Text field mapping saved. ${result.bindingSet.targets.length} field${
+          result.bindingSet.targets.length === 1 ? " is" : "s are"
+        } now connected for this template.`
+      );
+      return true;
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "Unable to save the text field mapping.",
+        { tone: "error" }
+      );
+      return false;
+    } finally {
+      setSavingTextFieldMapping(false);
+    }
+  }
+
   async function handleResetObjectMap() {
     if (!templateKit) {
       return;
@@ -2428,6 +2539,17 @@ export default function Home() {
                       onExportManifest={handleExportBrandKitManifest}
                     />
 
+                    <TextFieldMappingWalkthrough
+                      templateKit={templateKit}
+                      governance={templateGovernance}
+                      brandContract={activeBrandContract}
+                      textFieldSlides={templateTextFields}
+                      loadingTextFields={loadingTemplateTextFields}
+                      savingMapping={savingTextFieldMapping}
+                      onLoadTextFields={handleLoadTemplateTextFields}
+                      onSaveMapping={handleSaveTextFieldMapping}
+                    />
+
                     <TemplateGovernancePanel
                       templateKit={templateKit}
                       governance={templateGovernance}
@@ -2539,8 +2661,18 @@ export default function Home() {
                       selectedRecipeId={selectedRecipeId}
                       deckPlan={deckPlan}
                       customRecipes={customRecipes}
+                      deselectedSlideRoles={deselectedSlideRoles}
                       onSelectedRecipeIdChange={(recipeId) => {
                         setSelectedRecipeId(recipeId);
+                        setDeselectedSlideRoles([]);
+                        markGeneratedDeckStale();
+                      }}
+                      onToggleSlideRole={(slideRole) => {
+                        setDeselectedSlideRoles((current) =>
+                          current.includes(slideRole)
+                            ? current.filter((role) => role !== slideRole)
+                            : [...current, slideRole]
+                        );
                         markGeneratedDeckStale();
                       }}
                     />

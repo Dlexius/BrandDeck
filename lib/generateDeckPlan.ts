@@ -204,6 +204,12 @@ type GenerateDeckPlanOptions = {
   customRecipes?: DeckRecipe[];
   sourceDocuments?: SourceDocument[];
   contextPack?: ContextPack;
+  /**
+   * Creator-deselected slide roles for an explicitly chosen deck type. Only
+   * honored when recipeId is set; the title slide can never be removed and at
+   * least three slides must remain.
+   */
+  excludedSlideRoles?: string[];
 };
 
 type SourceEvidence = {
@@ -1506,6 +1512,47 @@ function shouldExpandDeckForContext({
   return sourceEvidence.summary.document_count > 0 && (promptRequestsDepth || sourcePackIsDense);
 }
 
+export const MIN_SELECTED_RECIPE_SLIDES = 3;
+
+/**
+ * Remove creator-deselected slides from an explicitly chosen deck type.
+ * Fails closed: the title slide always stays, and removing slides below the
+ * minimum is rejected instead of silently ignored.
+ */
+export function applyCreatorSlideSelection(
+  recipe: DeckRecipe,
+  excludedSlideRoles?: string[]
+): DeckRecipe {
+  const excluded = new Set(
+    (excludedSlideRoles ?? [])
+      .map((role) => role.trim())
+      .filter((role) => role && role !== "title")
+  );
+
+  if (excluded.size === 0) {
+    return recipe;
+  }
+
+  const slideSequence = recipe.slide_sequence.filter(
+    (slide) => !excluded.has(slide.slide_role)
+  );
+
+  if (slideSequence.length === recipe.slide_sequence.length) {
+    return recipe;
+  }
+
+  if (slideSequence.length < MIN_SELECTED_RECIPE_SLIDES) {
+    throw new Error(
+      `Keep at least ${MIN_SELECTED_RECIPE_SLIDES} slides selected for ${recipe.name}. Re-add a slide and generate again.`
+    );
+  }
+
+  return {
+    ...recipe,
+    slide_sequence: slideSequence
+  };
+}
+
 export function generateDeckPlan(
   userPrompt: string,
   parsedCsvData: AdoptionCsvRow[],
@@ -1517,7 +1564,10 @@ export function generateDeckPlan(
     options.recipeId,
     options.customRecipes
   );
-  const recipe = recipeSelection.recipe;
+  const recipe = applyCreatorSlideSelection(
+    recipeSelection.recipe,
+    options.recipeId ? options.excludedSlideRoles : undefined
+  );
   const contextRows = rowsFromContextPack(options.contextPack);
   const sourceRows = parsedCsvData.length > 0 ? parsedCsvData : contextRows;
   const hasAccountMetrics = hasUsableMetricRows(sourceRows);

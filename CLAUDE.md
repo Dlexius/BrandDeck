@@ -6,7 +6,7 @@ Brand-governed presentation generator. Creators describe a deck + attach context
 AI may only choose content, approved layout_ids, slide order/count, and emphasis phrases marked with *asterisks*. AI must NEVER choose colors, fonts, geometry, logos, or assets — those come from the brand contract and template kit. Generation fails closed.
 
 ## Working rules
-- Verify before declaring done: `npm run typecheck` + `npm run test` (vitest, 42 tests). Renderer changes: also smoke-render a real PPTX (see tests/new-layouts.test.ts patterns).
+- Verify before declaring done: `npm run typecheck` + `npm run test` (vitest, 51 tests). Renderer changes: also smoke-render a real PPTX (see tests/new-layouts.test.ts patterns).
 - E2E: `npm run dev`, needs OPENAI_API_KEY in .env.local (account is funded). Generation takes 1–3 min.
 - Client-facing copy must never contain AI/internal language. lib/validateDeckPlan.ts forbidden list is the source of truth — extend it when you find new leaks (includes a foreign-script pattern; sanitizer in openaiDeckPlanner scrubs sparse fragments first).
 - Admin/creator UI copy: no "renderer/object map/frame map/drift" jargon — use Slide Mapping, template mapping, Brand Lock, Deck Types.
@@ -22,12 +22,12 @@ AI may only choose content, approved layout_ids, slide order/count, and emphasis
 - White-label: governed assets (by role) beat bundled demo assets; adopted identities suppress bundled marks entirely.
 - Brand Settings: left nav (Overview / Brand / Templates / Governance / Deck Types); Overview = brand hero + go-live checklist; Deck Type Builder shows LayoutMiniature thumbnails.
 
-## Backlog / next steps (owner-prioritized)
-1. NotebookLM Enterprise connector: typed scaffold exists (lib/connectors/notebooklm-adapter.ts, env vars in .env.example). Wire live API once the owner has Enterprise credentials — follow the Google Drive connector pattern (answers/citations → bounded SourceDocuments).
-2. Governed image generation: admin Brand Settings action calling an image API (e.g. gpt-image-1) → asset lands in brand-asset inventory pending approval → renderer-usable only after approval. NEVER inline in planning (see README "Future Integrations").
-3. Guided text-field mapping walkthrough in Governance (mapping is the last skill-heavy admin step).
-4. Optional: creator-side slide deselection within a deck type; filter known system-fallback fonts (Angsana New etc.) from the template-detected fonts list.
-5. Roadmap only: OpenAI Realtime voice (generation API is already stateless JSON-in/out).
+## Backlog / next steps (owner-prioritized, June 2026)
+1. NotebookLM Enterprise connector: typed scaffold exists (lib/connectors/notebooklm-adapter.ts, env vars in .env.example). Wire live API once the owner has Enterprise credentials — follow the Google Drive connector pattern (answers/citations → bounded SourceDocuments). Owner: "later".
+2. ON HOLD per owner (June 2026) — do not start: governed image generation (admin action calling an image API → asset pending approval → renderer-usable only after approval; NEVER inline in planning, see README "Future Integrations").
+3. Roadmap only (tabled): OpenAI Realtime voice (generation API is already stateless JSON-in/out).
+
+Shipped June 2026: guided Text Field Mapping walkthrough in Governance (lib/template-binding-catalog.ts catalog gated to clone-renderer bindings, lib/template-text-fields.ts extraction, /api/template-text-fields, components/brand-settings/text-field-mapping-walkthrough.tsx → saves through the existing /api/template-object-map import path); creator slide deselection within a chosen deck type (excludedSlideRoles end to end, title slide locked, min 3; applyCreatorSlideSelection in generateDeckPlan); system-fallback font filtering (filterDetectedFonts in template-kit-store, applied at detect + hydrate).
 
 ## Gotchas
 - Dev server degrades after heavy HMR (stale chunks, even fake runtime errors) — restart it before judging breakage; production build is the truth.

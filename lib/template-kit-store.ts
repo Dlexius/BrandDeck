@@ -184,6 +184,8 @@ function hydrateTemplateKits(store: TemplateKitGlobal) {
           ...summary,
           // Kits persisted before static slides existed default to none.
           staticSlides: summary.staticSlides ?? [],
+          // Kits persisted before fallback-font filtering get cleaned on load.
+          detectedFonts: filterDetectedFonts(summary.detectedFonts ?? []),
           buffer: readRuntimeBuffer(bufferFile)
         }
       ];
@@ -293,6 +295,76 @@ async function buildSourceSlides(zip: JSZip, entries: string[]) {
   );
 }
 
+/**
+ * Fonts PowerPoint injects as East Asian / complex-script fallbacks. They
+ * appear in nearly every PPTX theme without being a brand choice, so they
+ * are noise in the detected-fonts list.
+ */
+const SYSTEM_FALLBACK_FONTS = new Set(
+  [
+    "Angsana New",
+    "AngsanaUPC",
+    "Browallia New",
+    "BrowalliaUPC",
+    "Cordia New",
+    "CordiaUPC",
+    "DilleniaUPC",
+    "EucrosiaUPC",
+    "FreesiaUPC",
+    "IrisUPC",
+    "JasmineUPC",
+    "KodchiangUPC",
+    "LilyUPC",
+    "MS Mincho",
+    "MS PMincho",
+    "MS Gothic",
+    "MS PGothic",
+    "MS UI Gothic",
+    "Yu Mincho",
+    "Yu Gothic",
+    "Meiryo",
+    "SimSun",
+    "NSimSun",
+    "SimHei",
+    "DengXian",
+    "Microsoft YaHei",
+    "Microsoft JhengHei",
+    "PMingLiU",
+    "MingLiU",
+    "Batang",
+    "BatangChe",
+    "Gungsuh",
+    "Gulim",
+    "GulimChe",
+    "Dotum",
+    "DotumChe",
+    "Malgun Gothic",
+    "Mangal",
+    "Latha",
+    "Vrinda",
+    "Raavi",
+    "Shruti",
+    "Tunga",
+    "Gautami",
+    "Kartika",
+    "Kalinga",
+    "Sylfaen",
+    "Estrangelo Edessa",
+    "Vani",
+    "Nyala",
+    "Leelawadee",
+    "Leelawadee UI"
+  ].map((font) => font.toLowerCase())
+);
+
+export function filterDetectedFonts(fonts: string[]) {
+  return fonts.filter(
+    (font) =>
+      // "+mj-lt" / "+mn-ea" style entries are theme slot references, not fonts.
+      !font.startsWith("+") && !SYSTEM_FALLBACK_FONTS.has(font.toLowerCase())
+  );
+}
+
 async function detectFonts(zip: JSZip, entries: string[]) {
   const xmlEntries = entries.filter((entry) =>
     /^ppt\/(theme|slideMasters|slideLayouts|slides)\//.test(entry)
@@ -308,7 +380,7 @@ async function detectFonts(zip: JSZip, entries: string[]) {
     })
   );
 
-  return uniqueSorted(fonts, 12);
+  return uniqueSorted(filterDetectedFonts(fonts), 12);
 }
 
 async function detectColors(zip: JSZip, entries: string[]) {

@@ -994,7 +994,9 @@ function trendChartSvg(slide: DeckSlide) {
 </svg>`;
 }
 
-function linesForDataBinding(
+// Exported so tests can assert the mapping-walkthrough catalog only offers
+// bindings this renderer resolves (default case returns []).
+export function linesForDataBinding(
   target: TemplateEditTarget,
   slide: DeckSlide,
   outputSlide: number

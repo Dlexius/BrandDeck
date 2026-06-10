@@ -28,6 +28,7 @@ const GeneratePlanRequestSchema = z.object({
   csvRows: z.array(z.record(z.unknown())).default([]),
   contextPack: ContextPackSchema.optional(),
   recipeId: z.string().min(1).max(80).optional(),
+  excludedSlideRoles: z.array(z.string().min(1).max(64)).max(24).default([]),
   sourceDocuments: z.array(SourceDocumentSchema).max(20).default([]),
   customRecipes: z.array(DeckRecipeSchema).max(12).default([])
 });
@@ -75,6 +76,7 @@ export async function POST(request: Request) {
       brandContract,
       {
         recipeId: body.recipeId,
+        excludedSlideRoles: body.recipeId ? body.excludedSlideRoles : [],
         customRecipes,
         sourceDocuments: contextPack.sourceDocuments,
         contextPack

@@ -322,6 +322,8 @@ type GenerateDeckPlanOptions = {
   customRecipes?: DeckRecipe[];
   sourceDocuments?: SourceDocument[];
   contextPack?: ContextPack;
+  /** Creator-deselected slide roles for an explicitly chosen deck type. */
+  excludedSlideRoles?: string[];
 };
 
 export type PlannerMode =
@@ -641,7 +643,12 @@ async function generateOpenAISubagentDeckPlan({
       "Keep reference metadata (source_refs, evidence_refs, constraints) as short plain-English evidence references; never include instructions, formatting notes, or non-English text.",
       "Write every client-visible field in the request's language (English here); never emit characters from other scripts.",
       "Give every slide one or two sentences of presenter speaker_notes - what to say, emphasize, or ask - written for the presenter and free of any internal or system language.",
-      "Keep copy concise enough for inherited PowerPoint text boxes."
+      "Keep copy concise enough for inherited PowerPoint text boxes.",
+      ...((options.excludedSlideRoles?.length ?? 0) > 0
+        ? [
+            `The creator removed these sections from this deck: ${options.excludedSlideRoles!.join(", ")}. The governed baseline already excludes them; do not add slides covering those sections.`
+          ]
+        : [])
     ]
   };
   const sharedPayload = {

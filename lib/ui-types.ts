@@ -142,6 +142,42 @@ export type TemplateGovernanceReport = {
   }>;
 };
 
+export type TemplateTextFieldObject = {
+  objectId: string;
+  objectName: string;
+  objectType: "text_box" | "table_cell";
+  textPreview: string;
+  characterCount: number;
+};
+
+export type TemplateTextFieldSlide = {
+  outputSlide: number;
+  layoutId: string;
+  sourceSlide: number;
+  narrativeRole: string;
+  objects: TemplateTextFieldObject[];
+};
+
+export type TemplateTextFieldsApiResponse = {
+  schema?: "branddeck.template-text-fields/v1";
+  templateKitId?: string;
+  templateFingerprint?: string;
+  generatedAt?: string;
+  slides?: TemplateTextFieldSlide[];
+  error?: string;
+};
+
+/** One saved walkthrough mapping row, shaped for the mapping-file import. */
+export type TemplateTextFieldTargetDraft = {
+  layoutId: string;
+  sourceSlide: number;
+  objectId: string;
+  objectType: "text_box" | "table_cell" | "slide_chrome";
+  role: string;
+  dataBinding: string;
+  required: boolean;
+};
+
 export type BrandAssetSummary = {
   id: string;
   fileName: string;
