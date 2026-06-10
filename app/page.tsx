@@ -28,10 +28,17 @@ import {
 } from "lucide-react";
 import brandContractData from "@/data/brand-contract.json";
 import { DeckPreview } from "@/components/deck-preview";
+import { MetricImportDropzone } from "@/components/metric-import";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  applySnapshotFieldToImportedRows,
+  businessSnapshotFromImport,
+  importBiMetricCsv,
+  type BiMetricImport
+} from "@/lib/bi-csv-import";
 import type { AdoptionCsvRow } from "@/lib/generateDeckPlan";
 import type {
   ApprovedLayoutId,
@@ -3871,6 +3878,10 @@ function BusinessDataCard({
   businessSnapshot,
   kpiSummary,
   workflowBusy,
+  metricImport,
+  importingMetrics,
+  onImportMetricFile,
+  onClearMetricImport,
   onSnapshotChange,
   onUseExample
 }: {
@@ -3883,6 +3894,10 @@ function BusinessDataCard({
     adoptionScore: number;
   } | null;
   workflowBusy: boolean;
+  metricImport: BiMetricImport | null;
+  importingMetrics: boolean;
+  onImportMetricFile: (files: FileList | null) => void;
+  onClearMetricImport: () => void;
   onSnapshotChange: (field: keyof BusinessSnapshotState, value: string) => void;
   onUseExample: () => void;
 }) {
@@ -3898,8 +3913,8 @@ function BusinessDataCard({
             Metrics Snapshot
           </h2>
           <p className="mt-1 text-sm text-[#787E89]">
-            Confirm the few numbers needed to ground the deck. Everything else
-            can stay optional.
+            Drop a BI export or confirm the few numbers needed to ground the
+            deck. Everything else can stay optional.
           </p>
         </div>
         <Button
@@ -3913,6 +3928,13 @@ function BusinessDataCard({
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
+        <MetricImportDropzone
+          metricImport={metricImport}
+          importing={importingMetrics}
+          disabled={workflowBusy}
+          onFiles={onImportMetricFile}
+          onClear={onClearMetricImport}
+        />
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
           <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-3">
@@ -4773,6 +4795,8 @@ export default function Home() {
   const [selectedClientProfileId, setSelectedClientProfileId] = useState("");
   const [clientProfileContext, setClientProfileContext] = useState("");
   const [csvRows, setCsvRows] = useState<AdoptionCsvRow[]>([]);
+  const [metricImport, setMetricImport] = useState<BiMetricImport | null>(null);
+  const [importingMetrics, setImportingMetrics] = useState(false);
   const [sourceDocuments, setSourceDocuments] = useState<SourceDocumentSummary[]>([]);
   const [sourceNotes, setSourceNotes] = useState("");
   const [googleDriveStatus, setGoogleDriveStatus] =
@@ -5183,6 +5207,7 @@ export default function Home() {
     setClientProfileContext("");
     setBusinessSnapshot(EMPTY_BUSINESS_SNAPSHOT);
     setCsvRows([]);
+    setMetricImport(null);
     setSourceDocuments([]);
     setSourceNotes("");
     setActiveGoogleSourceType(null);
@@ -5201,6 +5226,7 @@ export default function Home() {
   ) {
     setBusinessSnapshot(snapshot);
     setCsvRows(businessSnapshotToRows(snapshot));
+    setMetricImport(null);
     resetGeneratedDeck();
     if (noticeMessage) {
       setNotice(noticeMessage);
@@ -5217,7 +5243,69 @@ export default function Home() {
       ...businessSnapshot,
       [field]: value
     };
+
+    // While a BI import is loaded, a form edit updates the matching period in
+    // the imported series instead of collapsing it back to a one-row snapshot.
+    if (metricImport) {
+      const nextRows = applySnapshotFieldToImportedRows(
+        metricImport.rows,
+        field,
+        value
+      );
+      setMetricImport({ ...metricImport, rows: nextRows });
+      setCsvRows(nextRows);
+      setBusinessSnapshot(nextSnapshot);
+      resetGeneratedDeck();
+      setNotice("");
+      return;
+    }
+
     applyBusinessSnapshot(nextSnapshot);
+  }
+
+  async function handleImportMetricFile(files: FileList | null) {
+    const file = files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    setImportingMetrics(true);
+    try {
+      const text = await file.text();
+      const imported = importBiMetricCsv(text, { fileName: file.name });
+
+      setMetricImport(imported);
+      setCsvRows(imported.rows);
+      setBusinessSnapshot({
+        ...EMPTY_BUSINESS_SNAPSHOT,
+        ...businessSnapshotFromImport(imported.rows)
+      });
+      resetGeneratedDeck();
+      setNotice(
+        `Imported ${imported.rows.length} period${
+          imported.rows.length === 1 ? "" : "s"
+        } from ${file.name}. Review the mapped snapshot below, then generate.`
+      );
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "Unable to import the metrics file.",
+        { tone: "error" }
+      );
+    } finally {
+      setImportingMetrics(false);
+    }
+  }
+
+  function handleClearMetricImport() {
+    setMetricImport(null);
+    setCsvRows(businessSnapshotToRows(businessSnapshot));
+    resetGeneratedDeck();
+    setNotice(
+      "Metrics import cleared. The snapshot fields below keep the latest imported values."
+    );
   }
 
   function handleUseExampleSnapshot() {
@@ -5965,7 +6053,20 @@ export default function Home() {
           : undefined,
       csvRows: rows,
       manualSnapshot: businessSnapshot,
-      sourceDocuments: sourcePack
+      sourceDocuments: sourcePack,
+      selectedContextRefs: metricImport
+        ? [
+            {
+              id: `bi_export_${metricImport.fileName
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, "_")
+                .replace(/^_+|_+$/g, "")}`,
+              type: "bi_export" as const,
+              title: metricImport.fileName,
+              source: "BI export"
+            }
+          ]
+        : []
     });
     const response = await fetch("/api/generate-plan", {
       method: "POST",
@@ -6972,6 +7073,10 @@ export default function Home() {
                       businessSnapshot={businessSnapshot}
                       kpiSummary={kpiSummary}
                       workflowBusy={workflowBusy}
+                      metricImport={metricImport}
+                      importingMetrics={importingMetrics}
+                      onImportMetricFile={handleImportMetricFile}
+                      onClearMetricImport={handleClearMetricImport}
                       onSnapshotChange={handleBusinessSnapshotChange}
                       onUseExample={handleUseExampleSnapshot}
                     />

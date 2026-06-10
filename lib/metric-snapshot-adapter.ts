@@ -113,7 +113,8 @@ export function parseBusinessMetricRows(
       return BusinessMetricSnapshotSchema.parse({
         id: snapshotId(options.source, clientName, period, index),
         clientId: options.clientId,
-        clientName,
+        // The schema wants a non-empty clientName or none at all.
+        clientName: clientName || undefined,
         period,
         source: options.source,
         category: options.category ?? "business_metrics",
