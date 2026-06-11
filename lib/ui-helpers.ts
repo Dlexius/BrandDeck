@@ -16,12 +16,75 @@ export function cleanSnapshotValue(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Standard adoption row fields. Creator-named workflow metrics must not
+ * overwrite these, so colliding labels are skipped when rows are built.
+ */
+const RESERVED_ROW_KEYS = new Set([
+  "client_name",
+  "report_period",
+  "active_users",
+  "licensed_users",
+  "adoption_score",
+  "projects_active",
+  "mobile_usage_rate",
+  "daily_logs_count",
+  "rfi_count",
+  "submittals_count",
+  "top_feature",
+  "lowest_feature",
+  "risk_summary",
+  "recommendation_1",
+  "recommendation_2",
+  "recommendation_3"
+]);
+
+/** Stable id for a saved client profile, derived from the client name. */
+export function clientProfileIdFromName(name: string) {
+  return (
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 60) || "client"
+  );
+}
+
+export function workflowMetricKey(label: string) {
+  return cleanSnapshotValue(label)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+/**
+ * Creator-named workflow metrics as flexible row columns - the same shape a
+ * BI export produces, so manual entry and imports flow through one path.
+ */
+export function workflowMetricRowValues(
+  metrics: BusinessSnapshotState["workflow_metrics"]
+) {
+  const values: Record<string, string> = {};
+
+  for (const metric of metrics ?? []) {
+    const key = workflowMetricKey(metric.label);
+    const count = cleanSnapshotValue(metric.count);
+
+    if (!key || !count || RESERVED_ROW_KEYS.has(key) || values[key]) {
+      continue;
+    }
+
+    values[key] = count;
+  }
+
+  return values;
+}
+
 export function hasBusinessSnapshotMinimum(snapshot: BusinessSnapshotState) {
   return Boolean(
     cleanSnapshotValue(snapshot.client_name) &&
       cleanSnapshotValue(snapshot.report_period) &&
       cleanSnapshotValue(snapshot.active_users) &&
-      cleanSnapshotValue(snapshot.licensed_users) &&
       cleanSnapshotValue(snapshot.adoption_score)
   );
 }
@@ -40,9 +103,7 @@ export function businessSnapshotToRows(
   const adoptionScore = cleanSnapshotValue(snapshot.adoption_score);
   const projectsActive = cleanSnapshotValue(snapshot.projects_active);
   const mobileUsageRate = cleanSnapshotValue(snapshot.mobile_usage_rate);
-  const dailyLogsCount = cleanSnapshotValue(snapshot.daily_logs_count);
-  const rfiCount = cleanSnapshotValue(snapshot.rfi_count);
-  const submittalsCount = cleanSnapshotValue(snapshot.submittals_count);
+  const workflowValues = workflowMetricRowValues(snapshot.workflow_metrics);
   const topFeature = cleanSnapshotValue(snapshot.top_feature);
   const lowestFeature = cleanSnapshotValue(snapshot.lowest_feature);
   const riskSummary = cleanSnapshotValue(snapshot.risk_summary);
@@ -51,6 +112,7 @@ export function businessSnapshotToRows(
   const recommendation3 = cleanSnapshotValue(snapshot.recommendation_3);
 
   const currentRow: AdoptionCsvRow = {
+    ...workflowValues,
     client_name: clientName,
     report_period: reportPeriod,
     active_users: activeUsers,
@@ -58,9 +120,6 @@ export function businessSnapshotToRows(
     adoption_score: adoptionScore,
     projects_active: projectsActive,
     mobile_usage_rate: mobileUsageRate,
-    daily_logs_count: dailyLogsCount,
-    rfi_count: rfiCount,
-    submittals_count: submittalsCount,
     top_feature: topFeature,
     lowest_feature: lowestFeature,
     risk_summary: riskSummary,

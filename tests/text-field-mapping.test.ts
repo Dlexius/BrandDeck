@@ -117,6 +117,34 @@ describe("text field mapping catalog", () => {
   });
 });
 
+describe("bundled creator content stays client-safe", () => {
+  // Quick picks and preview notebook sources land in client-visible slides
+  // and planner evidence; they must never carry internal or system language.
+  const forbidden =
+    /\b(ai|openai|gpt|llm|model|prompt|renderer|placeholder|template kit|object map|frame map|drift|api)\b/i;
+
+  it("keeps built-in risk and action quick picks jargon-free", async () => {
+    const { BUILT_IN_ACTION_PRESETS } = await import("@/lib/ui-constants");
+
+    for (const preset of [
+      ...BUILT_IN_ACTION_PRESETS.risks,
+      ...BUILT_IN_ACTION_PRESETS.recommendations
+    ]) {
+      expect(forbidden.test(preset), preset).toBe(false);
+      expect(preset.length).toBeLessThanOrEqual(220);
+    }
+  });
+
+  it("keeps notebook preview sources jargon-free and clearly examples", async () => {
+    const { NOTEBOOKLM_SAMPLE_SOURCES } = await import("@/lib/ui-constants");
+
+    for (const source of NOTEBOOKLM_SAMPLE_SOURCES) {
+      expect(source.name.startsWith("Example - ")).toBe(true);
+      expect(forbidden.test(source.text), source.id).toBe(false);
+    }
+  });
+});
+
 describe("extractTemplateTextObjects", () => {
   async function buildTestPptx() {
     const zip = new JSZip();

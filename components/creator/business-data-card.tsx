@@ -6,8 +6,10 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { BiMetricImport } from "@/lib/bi-csv-import";
-import type { BusinessSnapshotState } from "@/lib/ui-types";
-import { Sparkles } from "lucide-react";
+import type { ActionPresets, BusinessSnapshotState, BusinessSnapshotTextField, PresentationMode, WorkflowMetricEntry } from "@/lib/ui-types";
+import { Plus, Sparkles, X } from "lucide-react";
+
+const MAX_WORKFLOW_METRICS = 24;
 
 function SnapshotInput({
   label,
@@ -70,35 +72,54 @@ function SnapshotTextarea({
 }
 
 export function BusinessDataCard({
+  presentationMode,
   businessSnapshot,
   kpiSummary,
+  actionPresets,
   workflowBusy,
   metricImport,
   importingMetrics,
   onImportMetricFile,
   onClearMetricImport,
   onSnapshotChange,
+  onWorkflowMetricsChange,
   onUseExample
 }: {
+  presentationMode: PresentationMode;
   businessSnapshot: BusinessSnapshotState;
+  actionPresets: ActionPresets;
   kpiSummary: {
     client?: string;
     period?: string;
-    activeUsers: number;
-    licensedUsers: number;
-    adoptionScore: number;
+    activeUsers?: number;
+    licensedUsers?: number;
+    adoptionScore?: number;
   } | null;
   workflowBusy: boolean;
   metricImport: BiMetricImport | null;
   importingMetrics: boolean;
   onImportMetricFile: (files: FileList | null) => void;
   onClearMetricImport: () => void;
-  onSnapshotChange: (field: keyof BusinessSnapshotState, value: string) => void;
+  onSnapshotChange: (field: BusinessSnapshotTextField, value: string) => void;
+  onWorkflowMetricsChange: (metrics: WorkflowMetricEntry[]) => void;
   onUseExample: () => void;
 }) {
   const update =
-    (field: keyof BusinessSnapshotState) => (value: string) =>
+    (field: BusinessSnapshotTextField) => (value: string) =>
       onSnapshotChange(field, value);
+  const internal = presentationMode === "internal";
+  const workflowMetrics = businessSnapshot.workflow_metrics ?? [];
+
+  function updateWorkflowMetric(
+    index: number,
+    patch: Partial<WorkflowMetricEntry>
+  ) {
+    onWorkflowMetricsChange(
+      workflowMetrics.map((metric, metricIndex) =>
+        metricIndex === index ? { ...metric, ...patch } : metric
+      )
+    );
+  }
 
   return (
     <Card>
@@ -108,8 +129,8 @@ export function BusinessDataCard({
             Metrics Snapshot
           </h2>
           <p className="mt-1 text-sm text-[#787E89]">
-            Drop a BI export or confirm the few numbers needed to ground the
-            deck. Everything else can stay optional.
+            Drop a Power BI PDF/PPTX or CSV export, or type the few numbers
+            needed to ground the deck. License counts can stay optional.
           </p>
         </div>
         <Button
@@ -134,10 +155,12 @@ export function BusinessDataCard({
           <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-3">
               <SnapshotInput
-                label="Client"
+                label={internal ? "Prepared For" : "Client"}
                 value={businessSnapshot.client_name}
                 disabled={workflowBusy}
-                placeholder="Harborview Civil Partners"
+                placeholder={
+                  internal ? "Field Operations Team" : "Harborview Civil Partners"
+                }
                 onChange={update("client_name")}
               />
               <SnapshotInput
@@ -164,7 +187,7 @@ export function BusinessDataCard({
                 onChange={update("active_users")}
               />
               <SnapshotInput
-                label="Licensed Users"
+                label="Licensed Users (Optional)"
                 value={businessSnapshot.licensed_users}
                 inputMode="numeric"
                 disabled={workflowBusy}
@@ -183,9 +206,14 @@ export function BusinessDataCard({
 
             <details className="rounded-md border border-[#E5E0DB] bg-white px-4 py-3">
               <summary className="cursor-pointer text-sm font-black text-brand-charcoal">
-                Trend baseline and mobile usage
+                Trend baseline
               </summary>
-              <div className="mt-4 grid gap-3 md:grid-cols-4">
+              <p className="mt-2 text-xs font-semibold leading-5 text-[#787E89]">
+                Add the prior period when you want the deck to show movement
+                over time. Imports with multiple periods fill this
+                automatically.
+              </p>
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
                 <SnapshotInput
                   label="Prior Period"
                   value={businessSnapshot.previous_report_period}
@@ -209,66 +237,97 @@ export function BusinessDataCard({
                   placeholder="213"
                   onChange={update("previous_active_users")}
                 />
-                <SnapshotInput
-                  label="Mobile Usage"
-                  value={businessSnapshot.mobile_usage_rate}
-                  inputMode="numeric"
-                  disabled={workflowBusy}
-                  placeholder="61"
-                  onChange={update("mobile_usage_rate")}
-                />
-                <SnapshotInput
-                  label="Prior Mobile"
-                  value={businessSnapshot.previous_mobile_usage_rate}
-                  inputMode="numeric"
-                  disabled={workflowBusy}
-                  placeholder="59"
-                  onChange={update("previous_mobile_usage_rate")}
-                />
               </div>
             </details>
 
             <details className="rounded-md border border-[#E5E0DB] bg-white px-4 py-3">
               <summary className="cursor-pointer text-sm font-black text-brand-charcoal">
-                Workflow signals
+                Workflow usage
+                {workflowMetrics.length > 0 && (
+                  <span className="ml-2 rounded-sm bg-[#F3F3F3] px-1.5 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-[#787E89]">
+                    {workflowMetrics.length} tracked
+                  </span>
+                )}
               </summary>
-              <div className="mt-4 grid gap-3 md:grid-cols-3">
-                <SnapshotInput
-                  label="Daily Logs"
-                  value={businessSnapshot.daily_logs_count}
-                  inputMode="numeric"
-                  disabled={workflowBusy}
-                  placeholder="1840"
-                  onChange={update("daily_logs_count")}
-                />
-                <SnapshotInput
-                  label="RFIs"
-                  value={businessSnapshot.rfi_count}
-                  inputMode="numeric"
-                  disabled={workflowBusy}
-                  placeholder="286"
-                  onChange={update("rfi_count")}
-                />
-                <SnapshotInput
-                  label="Submittals"
-                  value={businessSnapshot.submittals_count}
-                  inputMode="numeric"
-                  disabled={workflowBusy}
-                  placeholder="350"
-                  onChange={update("submittals_count")}
-                />
+              <p className="mt-2 text-xs font-semibold leading-5 text-[#787E89]">
+                Name the workflows your client uses and how many times each ran
+                this period. Use counts, not percentages - these become the
+                feature usage evidence in the deck.
+              </p>
+              <div className="mt-3 space-y-2">
+                {workflowMetrics.map((metric, index) => (
+                  <div
+                    key={index}
+                    className="grid grid-cols-[minmax(0,1fr)_120px_36px] items-center gap-2"
+                  >
+                    <Input
+                      value={metric.label}
+                      disabled={workflowBusy}
+                      placeholder="Workflow name, e.g. Inspections"
+                      onChange={(event) =>
+                        updateWorkflowMetric(index, {
+                          label: event.target.value
+                        })
+                      }
+                    />
+                    <Input
+                      value={metric.count}
+                      inputMode="numeric"
+                      disabled={workflowBusy}
+                      placeholder="Count"
+                      onChange={(event) =>
+                        updateWorkflowMetric(index, {
+                          count: event.target.value
+                        })
+                      }
+                    />
+                    <button
+                      type="button"
+                      disabled={workflowBusy}
+                      aria-label={`Remove ${metric.label || "workflow metric"}`}
+                      className="grid h-9 w-9 place-items-center rounded-md text-[#787E89] transition hover:bg-[#F3F3F3] hover:text-brand-charcoal disabled:opacity-50"
+                      onClick={() =>
+                        onWorkflowMetricsChange(
+                          workflowMetrics.filter(
+                            (_, metricIndex) => metricIndex !== index
+                          )
+                        )
+                      }
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+                {workflowMetrics.length < MAX_WORKFLOW_METRICS && (
+                  <Button
+                    variant="secondary"
+                    className="h-9 px-3"
+                    disabled={workflowBusy}
+                    onClick={() =>
+                      onWorkflowMetricsChange([
+                        ...workflowMetrics,
+                        { label: "", count: "" }
+                      ])
+                    }
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add workflow
+                  </Button>
+                )}
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <SnapshotInput
                   label="Top Workflow"
                   value={businessSnapshot.top_feature}
                   disabled={workflowBusy}
-                  placeholder="Daily Logs"
+                  placeholder="Strongest workflow this period"
                   onChange={update("top_feature")}
                 />
                 <SnapshotInput
-                  label="Lowest Workflow"
+                  label="Focus Workflow"
                   value={businessSnapshot.lowest_feature}
                   disabled={workflowBusy}
-                  placeholder="Submittals"
+                  placeholder="Workflow that needs attention"
                   onChange={update("lowest_feature")}
                 />
               </div>
@@ -278,6 +337,95 @@ export function BusinessDataCard({
               <summary className="cursor-pointer text-sm font-black text-brand-charcoal">
                 Risks and actions
               </summary>
+
+              {(actionPresets.risks.length > 0 ||
+                actionPresets.recommendations.length > 0) && (
+                <div className="mt-3 space-y-3">
+                  {actionPresets.risks.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#787E89]">
+                        Risk quick picks
+                      </p>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {actionPresets.risks.map((preset) => {
+                          const applied =
+                            businessSnapshot.risk_summary.trim() === preset;
+
+                          return (
+                            <button
+                              key={preset}
+                              type="button"
+                              disabled={workflowBusy || applied}
+                              title={preset}
+                              onClick={() => update("risk_summary")(preset)}
+                              className={`max-w-full truncate rounded-sm px-2 py-1 text-left text-[11px] font-semibold transition ${
+                                applied
+                                  ? "bg-brand-orange text-white"
+                                  : "bg-[#F3F3F3] text-brand-ink hover:bg-[#FFF1E8] hover:text-[#6B2A00]"
+                              } disabled:cursor-default`}
+                            >
+                              {preset}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {actionPresets.recommendations.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#787E89]">
+                        Recommendation quick picks
+                      </p>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {actionPresets.recommendations.map((preset) => {
+                          const slots: BusinessSnapshotTextField[] = [
+                            "recommendation_1",
+                            "recommendation_2",
+                            "recommendation_3"
+                          ];
+                          const applied = slots.some(
+                            (slot) =>
+                              String(businessSnapshot[slot]).trim() === preset
+                          );
+                          const openSlot = slots.find(
+                            (slot) => !String(businessSnapshot[slot]).trim()
+                          );
+
+                          return (
+                            <button
+                              key={preset}
+                              type="button"
+                              disabled={workflowBusy || applied || !openSlot}
+                              title={
+                                applied
+                                  ? preset
+                                  : openSlot
+                                    ? preset
+                                    : "All three recommendation slots are filled."
+                              }
+                              onClick={() => {
+                                if (openSlot) {
+                                  update(openSlot)(preset);
+                                }
+                              }}
+                              className={`max-w-full truncate rounded-sm px-2 py-1 text-left text-[11px] font-semibold transition ${
+                                applied
+                                  ? "bg-brand-orange text-white"
+                                  : "bg-[#F3F3F3] text-brand-ink hover:bg-[#FFF1E8] hover:text-[#6B2A00]"
+                              } disabled:cursor-default ${
+                                !applied && !openSlot ? "opacity-50" : ""
+                              }`}
+                            >
+                              {preset}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <SnapshotTextarea
                   label="Risk Summary"
@@ -324,15 +472,35 @@ export function BusinessDataCard({
               Current Snapshot
             </p>
             <p className="mt-2 text-sm font-bold text-brand-charcoal">
-              {kpiSummary ? kpiSummary.client : "Add account details"}
+              {kpiSummary
+                ? kpiSummary.client
+                : internal
+                  ? "Add team details"
+                  : "Add account details"}
             </p>
             <p className="mt-1 text-xs font-semibold leading-5 text-[#787E89]">
               {kpiSummary
-                ? `${kpiSummary.period} | ${kpiSummary.activeUsers}/${kpiSummary.licensedUsers} users | ${kpiSummary.adoptionScore}% score`
-                : "Client, period, active users, licensed users, and adoption score are required."}
+                ? [
+                    kpiSummary.period,
+                    kpiSummary.activeUsers === undefined
+                      ? undefined
+                      : kpiSummary.licensedUsers === undefined
+                        ? `${kpiSummary.activeUsers} active users`
+                        : `${kpiSummary.activeUsers}/${kpiSummary.licensedUsers} users`,
+                    kpiSummary.adoptionScore === undefined
+                      ? "adoption score needed"
+                      : `${kpiSummary.adoptionScore}% score`
+                  ]
+                    .filter(Boolean)
+                    .join(" | ")
+                : `${internal ? "Who the deck is for" : "Client"}, period, active users, and adoption score are needed for scorecard-style adoption reports.`}
             </p>
             <div className="mt-4 space-y-2 border-t border-[#E5E0DB] pt-3 text-xs font-semibold leading-5 text-[#787E89]">
-              <p>Client profiles and source notes can enrich the plan.</p>
+              <p>
+                {internal
+                  ? "Audience profiles and source notes can enrich the plan."
+                  : "Client profiles and source notes can enrich the plan."}
+              </p>
               <p>
                 BrandDeck uses these values as evidence while the brand contract
                 controls layout and visual decisions.

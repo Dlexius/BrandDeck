@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import type { GoogleDriveConnectorStatus, GoogleDriveFileOption, GoogleWorkspaceSourceType } from "@/lib/ui-types";
-import { ArrowRight, ExternalLink, FileCheck2, FileSpreadsheet, FileText, Loader2, Presentation, Search, X } from "lucide-react";
+import { NOTEBOOKLM_SAMPLE_SOURCES } from "@/lib/ui-constants";
+import type { ConnectorSettings, GoogleDriveConnectorStatus, GoogleDriveFileOption, GoogleWorkspaceSourceType } from "@/lib/ui-types";
+import { ArrowRight, BookOpenText, ExternalLink, FileCheck2, FileSpreadsheet, FileText, Loader2, Presentation, Search, X } from "lucide-react";
 
 export const GOOGLE_WORKSPACE_SOURCE_TYPES: Array<{
   type: GoogleWorkspaceSourceType;
@@ -315,7 +317,165 @@ function GoogleWorkspaceSourcePickerModal({
   );
 }
 
+function NotebookSourcePickerModal({
+  open,
+  attaching,
+  onClose,
+  onAttachSources
+}: {
+  open: boolean;
+  attaching: boolean;
+  onClose: () => void;
+  onAttachSources: (sourceIds: string[]) => void;
+}) {
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Notebook source picker"
+    >
+      <div className="workflow-soft-raise flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl ring-1 ring-black/10">
+        <div className="flex items-start justify-between gap-4 border-b border-[#E5E0DB] px-5 py-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-[#F3F3F3] ring-1 ring-[#EFEAE5]">
+              <img
+                src="/connector-logos/notebooklm.svg"
+                alt="NotebookLM logo"
+                className="h-7 w-7 object-contain"
+              />
+            </span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg font-black text-brand-charcoal">
+                  Select Notebook Sources
+                </h2>
+                <span className="rounded-sm bg-[#FFF1E8] px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-[#6B2A00]">
+                  Preview
+                </span>
+              </div>
+              <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-[#787E89]">
+                Grounded notebook answers and cited passages attach as source
+                context. These are example sources until NotebookLM Enterprise
+                credentials are connected.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-[#787E89] transition hover:bg-[#F3F3F3] hover:text-brand-charcoal"
+            onClick={onClose}
+            aria-label="Close notebook source picker"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="space-y-2 overflow-y-auto px-5 py-4">
+          {NOTEBOOKLM_SAMPLE_SOURCES.map((source) => {
+            const selected = selectedIds.includes(source.id);
+
+            return (
+              <button
+                key={source.id}
+                type="button"
+                onClick={() =>
+                  setSelectedIds((current) =>
+                    current.includes(source.id)
+                      ? current.filter((id) => id !== source.id)
+                      : [...current, source.id]
+                  )
+                }
+                className={`w-full rounded-md border px-3 py-3 text-left transition ${
+                  selected
+                    ? "border-brand-orange bg-[#FFF7F2]"
+                    : "border-[#E5E0DB] bg-white hover:bg-[#FCFBFA]"
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <span
+                    className={`grid h-9 w-9 shrink-0 place-items-center rounded-md ${
+                      selected
+                        ? "bg-brand-orange text-white"
+                        : "bg-[#F3F3F3] text-brand-ink"
+                    }`}
+                  >
+                    <BookOpenText className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-brand-charcoal">
+                          {source.name}
+                        </p>
+                        <p className="mt-1 text-xs font-semibold text-[#787E89]">
+                          {source.detail}
+                        </p>
+                      </div>
+                      <span
+                        className={`shrink-0 rounded-sm px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] ${
+                          selected
+                            ? "bg-brand-orange text-white"
+                            : "bg-[#F3F3F3] text-brand-ink"
+                        }`}
+                      >
+                        {selected ? "Selected" : "Select"}
+                      </span>
+                    </div>
+                    <p className="mt-2 line-clamp-2 text-xs font-medium leading-5 text-[#69707D]">
+                      {source.text}
+                    </p>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-[#E5E0DB] bg-[#FCFBFA] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs font-semibold text-[#787E89]">
+            {selectedIds.length} source{selectedIds.length === 1 ? "" : "s"}{" "}
+            selected
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button
+              variant="secondary"
+              className="h-10 px-4"
+              onClick={onClose}
+              disabled={attaching}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="h-10 px-4"
+              disabled={selectedIds.length === 0 || attaching}
+              onClick={() => {
+                onAttachSources(selectedIds);
+                setSelectedIds([]);
+              }}
+            >
+              {attaching ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FileCheck2 className="h-4 w-4" />
+              )}
+              Attach Sources
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ConnectedContextPanel({
+  connectorSettings,
   googleDriveStatus,
   activeGoogleSourceType,
   googleDriveQuery,
@@ -323,6 +483,11 @@ export function ConnectedContextPanel({
   selectedGoogleDriveFileIds,
   searchingGoogleDrive,
   importingGoogleDrive,
+  notebookPickerOpen,
+  attachingNotebookSources,
+  onOpenNotebookPicker,
+  onCloseNotebookPicker,
+  onAttachNotebookSources,
   onOpenGoogleSourcePicker,
   onCloseGoogleSourcePicker,
   onConnectGoogleDrive,
@@ -332,6 +497,7 @@ export function ConnectedContextPanel({
   onToggleGoogleDriveFile,
   onImportGoogleDriveFiles
 }: {
+  connectorSettings: ConnectorSettings;
   googleDriveStatus: GoogleDriveConnectorStatus | null;
   activeGoogleSourceType: GoogleWorkspaceSourceType | null;
   googleDriveQuery: string;
@@ -339,6 +505,11 @@ export function ConnectedContextPanel({
   selectedGoogleDriveFileIds: string[];
   searchingGoogleDrive: boolean;
   importingGoogleDrive: boolean;
+  notebookPickerOpen: boolean;
+  attachingNotebookSources: boolean;
+  onOpenNotebookPicker: () => void;
+  onCloseNotebookPicker: () => void;
+  onAttachNotebookSources: (sourceIds: string[]) => void;
   onOpenGoogleSourcePicker: (sourceType: GoogleWorkspaceSourceType) => void;
   onCloseGoogleSourcePicker: () => void;
   onConnectGoogleDrive: () => void;
@@ -352,26 +523,30 @@ export function ConnectedContextPanel({
   const googleDriveConnected = googleDriveStatus?.connected ?? false;
   const futureConnectors = [
     {
+      id: "dropbox" as const,
       name: "Dropbox",
       detail: "Shared files and account folders",
       logoUrl: "/connector-logos/dropbox.svg"
     },
     {
+      id: "box" as const,
       name: "Box",
       detail: "Governed folders and enterprise content",
       logoUrl: "/connector-logos/box.svg"
     },
     {
+      id: "salesforce" as const,
       name: "Salesforce",
       detail: "Renewals, opportunities, and stakeholder context",
       logoUrl: "/connector-logos/salesforce.svg"
     },
     {
+      id: "github" as const,
       name: "GitHub",
       detail: "Product repositories, release notes, and roadmap issues",
       logoUrl: "/connector-logos/github.svg"
     }
-  ];
+  ].filter((connector) => connectorSettings[connector.id]);
 
   return (
     <Card>
@@ -387,6 +562,56 @@ export function ConnectedContextPanel({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {connectorSettings.notebooklm && (
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+            <div className="rounded-md border border-[#E5E0DB] bg-white p-4">
+              <div className="flex items-start gap-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-[#F3F3F3] ring-1 ring-[#EFEAE5]">
+                  <img
+                    src="/connector-logos/notebooklm.svg"
+                    alt="NotebookLM logo"
+                    className="h-6 w-6 object-contain"
+                    loading="lazy"
+                  />
+                </span>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-black text-brand-charcoal">
+                      NotebookLM
+                    </p>
+                    <span className="rounded-sm bg-[#FFF1E8] px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-[#6B2A00]">
+                      Preview
+                    </span>
+                  </div>
+                  <p className="mt-1 max-w-2xl text-xs font-semibold leading-5 text-[#787E89]">
+                    Grounded answers and cited passages from your team&apos;s
+                    notebooks become source context. Example sources are shown
+                    until NotebookLM Enterprise credentials are connected.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-md border border-[#E5E0DB] bg-[#FCFBFA] p-4">
+              <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#787E89]">
+                Notebook Sources
+              </p>
+              <Button
+                className="mt-3 w-full"
+                onClick={onOpenNotebookPicker}
+                disabled={attachingNotebookSources}
+              >
+                <BookOpenText className="h-4 w-4" />
+                Browse Sources
+              </Button>
+              <p className="mt-3 text-xs font-semibold leading-5 text-[#787E89]">
+                Selected notebook answers attach as evidence the deck plan can
+                cite.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {connectorSettings.googleDrive && (
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
           <div className="rounded-md border border-[#E5E0DB] bg-white p-4">
             <div className="flex items-start gap-3">
@@ -453,7 +678,9 @@ export function ConnectedContextPanel({
             </p>
           </div>
         </div>
+        )}
 
+        {connectorSettings.googleDrive && (
         <div className="grid gap-3 md:grid-cols-3">
           {GOOGLE_WORKSPACE_SOURCE_TYPES.map((sourceType) => {
             const SourceIcon =
@@ -502,7 +729,9 @@ export function ConnectedContextPanel({
             );
           })}
         </div>
+        )}
 
+        {futureConnectors.length > 0 && (
         <div className="grid gap-2 md:grid-cols-4">
           {futureConnectors.map((connector) => (
             <div
@@ -533,6 +762,14 @@ export function ConnectedContextPanel({
             </div>
           ))}
         </div>
+        )}
+
+        <NotebookSourcePickerModal
+          open={notebookPickerOpen}
+          attaching={attachingNotebookSources}
+          onClose={onCloseNotebookPicker}
+          onAttachSources={onAttachNotebookSources}
+        />
 
         <GoogleWorkspaceSourcePickerModal
           activeSourceType={activeGoogleSourceType}

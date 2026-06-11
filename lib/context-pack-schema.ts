@@ -117,7 +117,6 @@ const ADOPTION_REQUIRED_FIELDS = [
   "client_name",
   "report_period",
   "active_users",
-  "licensed_users",
   "adoption_score"
 ] as const;
 

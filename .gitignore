@@ -11,3 +11,6 @@ npm-debug.log*
 .DS_Store
 branddeck-studio-*.png
 ~$*
+
+# clerk configuration (can include secrets)
+/.clerk/

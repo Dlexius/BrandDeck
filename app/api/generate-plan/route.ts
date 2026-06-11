@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     ) {
       return NextResponse.json(
         {
-          error: `${recipeSelection.recipe.name} needs a client metrics snapshot with client name, reporting period, active users, licensed users, and adoption score. Add metrics or choose Product Update / Ad Hoc.`
+          error: `${recipeSelection.recipe.name} needs a client metrics snapshot with client name, reporting period, active users, and adoption score. Add metrics or choose Product Update / Ad Hoc.`
         },
         { status: 422 }
       );

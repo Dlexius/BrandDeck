@@ -8,9 +8,8 @@ import {
 } from "@/lib/bi-csv-import";
 
 /**
- * One drag-drop intake for BI exports (Power BI, Tableau, Looker, or any
- * spreadsheet CSV). Shows what was auto-mapped after import so creators can
- * trust - or correct - the snapshot fields below it.
+ * One drag-drop intake for BI exports. Shows what was auto-mapped after import
+ * so creators can trust - or correct - the snapshot fields below it.
  */
 export function MetricImportDropzone({
   metricImport,
@@ -30,6 +29,10 @@ export function MetricImportDropzone({
   const busy = disabled || importing;
 
   if (metricImport) {
+    const metricLabel =
+      metricImport.sourceFormat === "pdf" || metricImport.sourceFormat === "pptx"
+        ? "analysis metric"
+        : "workflow metric";
     const periodSummary =
       metricImport.periods.length > 1
         ? `${metricImport.periods[0]} - ${
@@ -82,7 +85,7 @@ export function MetricImportDropzone({
                 .join(", ")}
               className="rounded-sm bg-[#F3F3F3] px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-brand-ink"
             >
-              +{metricImport.metricColumns.length} context metric
+              +{metricImport.metricColumns.length} {metricLabel}
               {metricImport.metricColumns.length === 1 ? "" : "s"}
             </span>
           ) : null}
@@ -144,14 +147,32 @@ export function MetricImportDropzone({
     >
       <UploadCloud className="h-5 w-5 shrink-0" />
       <span className="text-left">
-        {importing
-          ? "Reading metrics export..."
-          : "Drop a BI export here (Power BI, Tableau, or any CSV) - columns map automatically"}
+        {importing ? (
+          "Reading metrics export..."
+        ) : (
+          <>
+            <span className="block font-bold text-brand-charcoal">
+              Drop a metrics export from your reporting tool
+            </span>
+            <span className="mt-0.5 block text-xs font-semibold">
+              Works with Power BI PDF/PPTX exports when report text is
+              selectable, or with CSV/TSV exports from any reporting tool.{" "}
+              <a
+                href="/api/sample-csv"
+                download
+                className="font-bold text-brand-orange underline-offset-2 hover:underline"
+                onClick={(event) => event.stopPropagation()}
+              >
+                Download a sample CSV
+              </a>
+            </span>
+          </>
+        )}
       </span>
       <input
         ref={inputRef}
         type="file"
-        accept=".csv,.tsv,.txt"
+        accept=".csv,.tsv,.txt,.pdf,.pptx,text/csv,text/tab-separated-values,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation"
         className="hidden"
         onClick={(event) => event.stopPropagation()}
         onChange={(event) => {

@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import { z } from "zod";
-import { auditDeckAccuracy } from "@/lib/auditDeckAccuracy";
+import { auditDeckAccuracy, safeSourceFidelityLines } from "@/lib/auditDeckAccuracy";
 import { auditDeckFit } from "@/lib/auditDeckFit";
 import type { ContextPack } from "@/lib/context-pack-schema";
 import {
@@ -432,6 +432,98 @@ function assertOpenAIPlannerEnabled() {
   }
 }
 
+function truncateAtWordBoundary(sentence: string, maxLength: number) {
+  const compacted = sentence.replace(/\s+/g, " ").trim();
+
+  if (compacted.length <= maxLength) {
+    return compacted;
+  }
+
+  const cut = compacted.slice(0, maxLength);
+  const lastSpace = cut.lastIndexOf(" ");
+
+  return (lastSpace > maxLength * 0.6 ? cut.slice(0, lastSpace) : cut).replace(
+    /[\s,;:]+$/,
+    ""
+  );
+}
+
+/**
+ * Free, deterministic fix for source-grounding audit failures: restate the
+ * top safe source action/risk line (the audit's own extraction) inside the
+ * deck's existing fields, trimmed to the brand layout budgets. Runs before
+ * any paid revision pass so a paraphrase-only miss never costs more model
+ * calls - and never fails a generation on its own.
+ */
+export function repairSourceGrounding(
+  candidate: DeckPlan,
+  failedCheckIds: Set<string>,
+  sourceDocuments: SourceDocument[]
+): DeckPlan | null {
+  const needsAction = failedCheckIds.has("source-grounding:action");
+  const needsRisk = failedCheckIds.has("source-grounding:risk");
+
+  if (!needsAction && !needsRisk) {
+    return null;
+  }
+
+  const lines = safeSourceFidelityLines(sourceDocuments);
+  const slides = candidate.slides.map((slide) => ({
+    ...slide,
+    fields: { ...slide.fields }
+  }));
+  let changed = false;
+
+  if (needsAction && lines.actions[0]) {
+    const stepSlide = slides.find((slide) => slide.layout_id === "next_steps");
+    const recommendationSlide = slides.find(
+      (slide) => slide.layout_id === "risks_recommendations"
+    );
+
+    if (stepSlide && Array.isArray(stepSlide.fields.steps)) {
+      const steps = (stepSlide.fields.steps as unknown[]).map(String);
+
+      if (steps.length > 0) {
+        steps[steps.length - 1] = truncateAtWordBoundary(lines.actions[0], 140);
+        stepSlide.fields.steps = steps;
+        changed = true;
+      }
+    } else if (
+      recommendationSlide &&
+      Array.isArray(recommendationSlide.fields.recommendations)
+    ) {
+      const recommendations = (
+        recommendationSlide.fields.recommendations as unknown[]
+      ).map(String);
+
+      if (recommendations.length > 0) {
+        recommendations[recommendations.length - 1] = truncateAtWordBoundary(
+          lines.actions[0],
+          150
+        );
+        recommendationSlide.fields.recommendations = recommendations;
+        changed = true;
+      }
+    }
+  }
+
+  if (needsRisk && lines.risks[0]) {
+    const riskSlide = slides.find(
+      (slide) => slide.layout_id === "risks_recommendations"
+    );
+
+    if (riskSlide) {
+      riskSlide.fields.risk_summary = truncateAtWordBoundary(
+        lines.risks[0],
+        190
+      );
+      changed = true;
+    }
+  }
+
+  return changed ? { ...candidate, slides } : null;
+}
+
 function assertCandidateIsUsable(
   candidate: DeckPlan,
   brandContract: BrandContract,
@@ -605,9 +697,20 @@ async function generateOpenAISubagentDeckPlan({
   // Payload tiers: every agent receives the core; heavy evidence, metric rows,
   // and the baseline plan are only sent to stages that actually use them.
   // Static instructions stay constant per agent so prompt prefixes cache well.
+  const fidelityLines = safeSourceFidelityLines(sourceDocuments);
   const evidencePayload = {
     source_documents: compactSourceDocuments(sourceDocuments),
-    context_pack: compactForModel(options.contextPack, 12000)
+    context_pack: compactForModel(options.contextPack, 12000),
+    // The grounding audit checks for these exact safe sentences; giving them
+    // to every planning stage keeps first-pass plans audit-clean.
+    source_fidelity_lines:
+      fidelityLines.explicitActions.length > 0 ||
+      fidelityLines.explicitRisks.length > 0
+        ? {
+            action_lines: fidelityLines.actions,
+            risk_lines: fidelityLines.risks
+          }
+        : undefined
   };
   const dataPayload = {
     business_data_rows: compactForModel(parsedCsvData, 12000)
@@ -644,6 +747,7 @@ async function generateOpenAISubagentDeckPlan({
       "Write every client-visible field in the request's language (English here); never emit characters from other scripts.",
       "Give every slide one or two sentences of presenter speaker_notes - what to say, emphasize, or ask - written for the presenter and free of any internal or system language.",
       "Keep copy concise enough for inherited PowerPoint text boxes.",
+      "When source_fidelity_lines are provided, restate at least one action_line inside a recommendations or steps field and at least one risk_line inside a risk summary field - trim to fit the layout budget, but keep the original wording recognizable rather than paraphrasing it away.",
       ...((options.excludedSlideRoles?.length ?? 0) > 0
         ? [
             `The creator removed these sections from this deck: ${options.excludedSlideRoles!.join(", ")}. The governed baseline already excludes them; do not add slides covering those sections.`
@@ -815,6 +919,37 @@ async function generateOpenAISubagentDeckPlan({
     contextPack: options.contextPack
   });
 
+  // Source-grounding misses get a free deterministic restatement before any
+  // paid revision pass; if that alone fixes the audit, no extra model calls.
+  function applyGroundingRepair() {
+    if (guardrails.passed) {
+      return;
+    }
+
+    const repaired = repairSourceGrounding(
+      candidate,
+      new Set(
+        guardrails.accuracy.checks
+          .filter((entry) => !entry.passed)
+          .map((entry) => entry.id)
+      ),
+      sourceDocuments
+    );
+
+    if (repaired) {
+      candidate = repaired;
+      guardrails = candidateGuardrailFailures({
+        candidate,
+        brandContract,
+        csvRows: parsedCsvData,
+        sourceDocuments,
+        contextPack: options.contextPack
+      });
+    }
+  }
+
+  applyGroundingRepair();
+
   for (let attempt = 1; !guardrails.passed && attempt <= 2; attempt += 1) {
     const revision = await runStructuredAgent({
       client,
@@ -862,6 +997,10 @@ async function generateOpenAISubagentDeckPlan({
       contextPack: options.contextPack
     });
   }
+
+  // Revisions can paraphrase the fidelity lines back out; repair once more
+  // before the hard assert so grounding alone never fails the generation.
+  applyGroundingRepair();
 
   assertCandidateIsUsable(
     candidate,

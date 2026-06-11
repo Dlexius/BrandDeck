@@ -12,6 +12,9 @@ import { SettingsSectionNav } from "@/components/brand-settings/settings-nav";
 import { TemplateAssetLibrary } from "@/components/brand-settings/template-asset-library";
 import { TemplateGovernancePanel } from "@/components/brand-settings/template-governance-panel";
 import { TextFieldMappingWalkthrough } from "@/components/brand-settings/text-field-mapping-walkthrough";
+import { WorkspaceModeCard } from "@/components/brand-settings/workspace-mode-card";
+import { ActionPresetManager } from "@/components/brand-settings/action-preset-manager";
+import { ConnectorSettingsCard } from "@/components/brand-settings/connector-settings-card";
 import { TemplateOnboardingWorkbench } from "@/components/brand-settings/template-onboarding-workbench";
 import { BusinessDataCard } from "@/components/creator/business-data-card";
 import { ClientProfilePanel } from "@/components/creator/client-profile-panel";
@@ -27,14 +30,14 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import type { DeckAccuracyAudit } from "@/lib/auditDeckAccuracy";
 import type { DeckFitAudit } from "@/lib/auditDeckFit";
-import { BiMetricImport, applySnapshotFieldToImportedRows, businessSnapshotFromImport, importBiMetricCsv } from "@/lib/bi-csv-import";
+import { BiMetricImport, applySnapshotFieldToImportedRows, applyWorkflowMetricsToImportedRows, businessSnapshotFromImport } from "@/lib/bi-csv-import";
 import { buildContextPackFromInputs } from "@/lib/context-pack-schema";
 import { ApprovedLayoutId, BrandContract, DeckPlan, SourceDocument } from "@/lib/deck-plan-schema";
 import { DeckRecipe, approvedDeckRecipes } from "@/lib/deck-recipes";
 import { AdoptionCsvRow } from "@/lib/generateDeckPlan";
-import { CLIENT_PROFILES, DEFAULT_PROMPT, DEFAULT_RECIPE_BUILDER, EMPTY_BUSINESS_SNAPSHOT, EXAMPLE_BUSINESS_SNAPSHOT, MAX_ADMIN_RECIPE_LAYOUTS, defaultBrandContract } from "@/lib/ui-constants";
-import { brandColorTokenLabel, businessSnapshotToRows, createSourceDocument, isHexColor, mergeSourceDocuments, recipeFromBuilder, safeDownloadFileName } from "@/lib/ui-helpers";
-import type { BrandAssetSummary, BrandContractApiResponse, BrandPreflightReport, BusinessSnapshotState, CreatorWorkflowStep, ExportCertificate, GeneratePlanApiResponse, GoogleDriveConnectorStatus, GoogleDriveFileOption, GoogleDriveImportResponse, GoogleWorkspaceSourceType, RecipeBuilderState, SettingsSection, SourceDocumentSummary, TemplateGovernanceReport, TemplateKitSummary, TemplateTextFieldSlide, TemplateTextFieldTargetDraft, TemplateTextFieldsApiResponse, WorkspaceView } from "@/lib/ui-types";
+import { BUILT_IN_ACTION_PRESETS, CLIENT_PROFILES, DEFAULT_PROMPT, DEFAULT_RECIPE_BUILDER, EMPTY_BUSINESS_SNAPSHOT, EXAMPLE_BUSINESS_SNAPSHOT, MAX_ADMIN_RECIPE_LAYOUTS, NOTEBOOKLM_SAMPLE_SOURCES, defaultBrandContract } from "@/lib/ui-constants";
+import { brandColorTokenLabel, businessSnapshotToRows, cleanSnapshotValue, clientProfileIdFromName, createSourceDocument, isHexColor, mergeSourceDocuments, recipeFromBuilder, safeDownloadFileName } from "@/lib/ui-helpers";
+import type { ActionPresetType, ActionPresets, BrandAssetSummary, BrandContractApiResponse, BrandPreflightReport, BusinessSnapshotState, BusinessSnapshotTextField, ClientProfile, ConnectorId, ConnectorSettings, CreatorWorkflowStep, ExportCertificate, GeneratePlanApiResponse, GoogleDriveConnectorStatus, GoogleDriveFileOption, GoogleDriveImportResponse, GoogleWorkspaceSourceType, PresentationMode, RecipeBuilderState, SettingsSection, SourceDocumentSummary, TemplateGovernanceReport, TemplateKitSummary, TemplateTextFieldSlide, TemplateTextFieldTargetDraft, TemplateTextFieldsApiResponse, WorkflowMetricEntry, WorkspaceView } from "@/lib/ui-types";
 import { ValidationReport, validateDeckPlan } from "@/lib/validateDeckPlan";
 import { AlertTriangle, ArrowRight, Loader2, Lock, RotateCcw, Sparkles } from "lucide-react";
 
@@ -51,6 +54,33 @@ export default function Home() {
     useState<BusinessSnapshotState>(EMPTY_BUSINESS_SNAPSHOT);
   const [selectedClientProfileId, setSelectedClientProfileId] = useState("");
   const [clientProfileContext, setClientProfileContext] = useState("");
+  // Workspace-saved clients. While empty, the bundled example clients show;
+  // the first saved client replaces them (white-label behavior).
+  const [customClientProfiles, setCustomClientProfiles] = useState<
+    ClientProfile[]
+  >([]);
+  const [savingClientProfile, setSavingClientProfile] = useState(false);
+  const [deletingClientProfileId, setDeletingClientProfileId] = useState("");
+  const [presentationMode, setPresentationMode] =
+    useState<PresentationMode>("client");
+  const [savingPresentationMode, setSavingPresentationMode] = useState(false);
+  const [connectorSettings, setConnectorSettings] = useState<ConnectorSettings>({
+    googleDrive: true,
+    notebooklm: false,
+    dropbox: true,
+    box: true,
+    salesforce: true,
+    github: true
+  });
+  const [savingConnectorId, setSavingConnectorId] = useState("");
+  const [notebookPickerOpen, setNotebookPickerOpen] = useState(false);
+  const [attachingNotebookSources, setAttachingNotebookSources] =
+    useState(false);
+  const [customActionPresets, setCustomActionPresets] = useState<ActionPresets>(
+    { risks: [], recommendations: [] }
+  );
+  const [savingActionPreset, setSavingActionPreset] = useState(false);
+  const [removingActionPreset, setRemovingActionPreset] = useState("");
   const [csvRows, setCsvRows] = useState<AdoptionCsvRow[]>([]);
   const [metricImport, setMetricImport] = useState<BiMetricImport | null>(null);
   const [importingMetrics, setImportingMetrics] = useState(false);
@@ -161,9 +191,29 @@ export default function Home() {
   const [resettingBrandColors, setResettingBrandColors] = useState(false);
 
   const currentRow = csvRows[csvRows.length - 1];
+  // Internal workspaces never see the bundled example clients - they start
+  // from an empty saved-audience list instead.
+  const visibleClientProfiles =
+    customClientProfiles.length > 0
+      ? customClientProfiles
+      : presentationMode === "client"
+        ? CLIENT_PROFILES
+        : [];
+  const showingExampleClientProfiles =
+    presentationMode === "client" && customClientProfiles.length === 0;
+  const actionPresets: ActionPresets = {
+    risks: [...BUILT_IN_ACTION_PRESETS.risks, ...customActionPresets.risks],
+    recommendations: [
+      ...BUILT_IN_ACTION_PRESETS.recommendations,
+      ...customActionPresets.recommendations
+    ]
+  };
   const selectedClientProfile = useMemo(
-    () => CLIENT_PROFILES.find((profile) => profile.id === selectedClientProfileId),
-    [selectedClientProfileId]
+    () =>
+      visibleClientProfiles.find(
+        (profile) => profile.id === selectedClientProfileId
+      ),
+    [visibleClientProfiles, selectedClientProfileId]
   );
 
   useEffect(() => {
@@ -175,12 +225,18 @@ export default function Home() {
           assetResponse,
           templateResponse,
           recipeResponse,
-          brandContractResponse
+          brandContractResponse,
+          clientProfileResponse,
+          workspaceSettingsResponse,
+          actionPresetResponse
         ] = await Promise.all([
           fetch("/api/brand-assets"),
           fetch("/api/template-intake"),
           fetch("/api/deck-recipes"),
-          fetch("/api/brand-contract")
+          fetch("/api/brand-contract"),
+          fetch("/api/client-profiles"),
+          fetch("/api/workspace-settings"),
+          fetch("/api/action-presets")
         ]);
         const assetResult = (await assetResponse.json()) as {
           assets?: BrandAssetSummary[];
@@ -193,6 +249,19 @@ export default function Home() {
         };
         const brandContractResult =
           (await brandContractResponse.json()) as BrandContractApiResponse;
+        const clientProfileResult = (await clientProfileResponse.json()) as {
+          profiles?: ClientProfile[];
+        };
+        const workspaceSettingsResult =
+          (await workspaceSettingsResponse.json()) as {
+            settings?: {
+              presentationMode?: PresentationMode;
+              connectors?: ConnectorSettings;
+            };
+          };
+        const actionPresetResult = (await actionPresetResponse.json()) as {
+          custom?: ActionPresets;
+        };
 
         if (cancelled) {
           return;
@@ -209,6 +278,16 @@ export default function Home() {
 
         setBrandAssets(restoredAssets);
         setCustomRecipes(restoredRecipes);
+        setCustomClientProfiles(clientProfileResult.profiles ?? []);
+        setPresentationMode(
+          workspaceSettingsResult.settings?.presentationMode ?? "client"
+        );
+        if (workspaceSettingsResult.settings?.connectors) {
+          setConnectorSettings(workspaceSettingsResult.settings.connectors);
+        }
+        setCustomActionPresets(
+          actionPresetResult.custom ?? { risks: [], recommendations: [] }
+        );
         setActiveBrandContract(restoredBrandContract);
         setBrandColorDraft({
           ...restoredBrandContract.approved_color_tokens
@@ -303,9 +382,14 @@ export default function Home() {
       return null;
     }
 
-    const activeUsers = Number(currentRow.active_users);
-    const licensedUsers = Number(currentRow.licensed_users);
-    const adoptionScore = Number(currentRow.adoption_score);
+    const metricNumber = (value: unknown) => {
+      const numeric = Number(value);
+
+      return Number.isFinite(numeric) ? numeric : undefined;
+    };
+    const activeUsers = metricNumber(currentRow.active_users);
+    const licensedUsers = metricNumber(currentRow.licensed_users);
+    const adoptionScore = metricNumber(currentRow.adoption_score);
 
     return {
       client: currentRow.client_name,
@@ -561,7 +645,7 @@ export default function Home() {
   }
 
   function handleBusinessSnapshotChange(
-    field: keyof BusinessSnapshotState,
+    field: BusinessSnapshotTextField,
     value: string
   ) {
     const nextSnapshot = {
@@ -588,6 +672,31 @@ export default function Home() {
     applyBusinessSnapshot(nextSnapshot);
   }
 
+  function handleWorkflowMetricsChange(metrics: WorkflowMetricEntry[]) {
+    const nextSnapshot = {
+      ...businessSnapshot,
+      workflow_metrics: metrics
+    };
+
+    // Mirror handleBusinessSnapshotChange: with an import loaded, workflow
+    // edits land on the latest imported period instead of collapsing it.
+    if (metricImport) {
+      const nextRows = applyWorkflowMetricsToImportedRows(
+        metricImport.rows,
+        businessSnapshot.workflow_metrics ?? [],
+        metrics
+      );
+      setMetricImport({ ...metricImport, rows: nextRows });
+      setCsvRows(nextRows);
+      setBusinessSnapshot(nextSnapshot);
+      markGeneratedDeckStale();
+      setNotice("");
+      return;
+    }
+
+    applyBusinessSnapshot(nextSnapshot);
+  }
+
   async function handleImportMetricFile(files: FileList | null) {
     const file = files?.[0];
 
@@ -597,14 +706,29 @@ export default function Home() {
 
     setImportingMetrics(true);
     try {
-      const text = await file.text();
-      const imported = importBiMetricCsv(text, { fileName: file.name });
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/metrics/import", {
+        method: "POST",
+        body: formData
+      });
+      const result = (await response.json()) as {
+        imported?: BiMetricImport;
+        error?: string;
+      };
+
+      if (!response.ok || !result.imported) {
+        throw new Error(result.error ?? "Unable to import the metrics file.");
+      }
+
+      const imported = result.imported;
 
       setMetricImport(imported);
       setCsvRows(imported.rows);
       setBusinessSnapshot({
         ...EMPTY_BUSINESS_SNAPSHOT,
-        ...businessSnapshotFromImport(imported.rows)
+        ...businessSnapshotFromImport(imported)
       });
       markGeneratedDeckStale();
       setNotice(
@@ -720,7 +844,7 @@ export default function Home() {
   }
 
   function handleSelectClientProfile(profileId: string) {
-    const profile = CLIENT_PROFILES.find((item) => item.id === profileId);
+    const profile = visibleClientProfiles.find((item) => item.id === profileId);
 
     if (!profile) {
       return;
@@ -730,8 +854,281 @@ export default function Home() {
     setClientProfileContext(profile.context);
     applyBusinessSnapshot(
       profile.snapshot,
-      `${profile.name} profile loaded with tools, context, and reporting metrics.`
+      `${profile.name} loaded with saved context and reporting metrics.`
     );
+  }
+
+  // Saving captures everything already entered in this step - snapshot,
+  // workflow metrics, and continuity context - so the next deck for this
+  // client starts from one click instead of re-entry.
+  async function handleSaveCurrentClient() {
+    const name = cleanSnapshotValue(businessSnapshot.client_name);
+
+    if (!name) {
+      setNotice(
+        "Enter a client name in the metrics snapshot before saving the client.",
+        { tone: "error" }
+      );
+      return;
+    }
+
+    setSavingClientProfile(true);
+
+    try {
+      const id = clientProfileIdFromName(name);
+      const existing =
+        customClientProfiles.find((profile) => profile.id === id) ??
+        (selectedClientProfile?.name === name ? selectedClientProfile : undefined);
+      const tools = [
+        ...new Set(
+          (businessSnapshot.workflow_metrics ?? [])
+            .map((metric) => cleanSnapshotValue(metric.label))
+            .filter(Boolean)
+        )
+      ].slice(0, 12);
+      const contextSnippet = clientProfileContext
+        .replace(/\s+/g, " ")
+        .trim()
+        .split(/(?<=\.)\s/)[0]
+        ?.slice(0, 220);
+      const profile: ClientProfile = {
+        id,
+        name,
+        segment: existing?.segment ?? "",
+        stage: existing?.stage ?? "",
+        tools: tools.length > 0 ? tools : existing?.tools ?? [],
+        focus:
+          cleanSnapshotValue(businessSnapshot.risk_summary).slice(0, 220) ||
+          contextSnippet ||
+          existing?.focus ||
+          "",
+        snapshot: businessSnapshot,
+        context: clientProfileContext
+      };
+      const response = await fetch("/api/client-profiles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile })
+      });
+      const result = (await response.json()) as {
+        profile?: ClientProfile;
+        profiles?: ClientProfile[];
+        error?: string;
+      };
+
+      if (!response.ok || !result.profile || !result.profiles) {
+        throw new Error(result.error ?? "Unable to save the client profile.");
+      }
+
+      setCustomClientProfiles(result.profiles);
+      setSelectedClientProfileId(result.profile.id);
+      setNotice(
+        `${result.profile.name} saved. Pick this client next time to load the same context and metrics.`
+      );
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "Unable to save the client profile.",
+        { tone: "error" }
+      );
+    } finally {
+      setSavingClientProfile(false);
+    }
+  }
+
+  async function handleSelectPresentationMode(mode: PresentationMode) {
+    setSavingPresentationMode(true);
+
+    try {
+      const response = await fetch("/api/workspace-settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: { presentationMode: mode } })
+      });
+      const result = (await response.json()) as {
+        settings?: { presentationMode?: PresentationMode };
+        error?: string;
+      };
+
+      if (!response.ok || !result.settings?.presentationMode) {
+        throw new Error(result.error ?? "Unable to save workspace settings.");
+      }
+
+      setPresentationMode(result.settings.presentationMode);
+      setNotice(
+        result.settings.presentationMode === "internal"
+          ? "Workspace set to internal presentations. Creators now save audiences instead of clients."
+          : "Workspace set to client presentations."
+      );
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "Unable to save workspace settings.",
+        { tone: "error" }
+      );
+    } finally {
+      setSavingPresentationMode(false);
+    }
+  }
+
+  async function handleToggleConnector(id: ConnectorId, enabled: boolean) {
+    setSavingConnectorId(id);
+
+    try {
+      const nextConnectors = { ...connectorSettings, [id]: enabled };
+      const response = await fetch("/api/workspace-settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: { connectors: nextConnectors } })
+      });
+      const result = (await response.json()) as {
+        settings?: { connectors?: ConnectorSettings };
+        error?: string;
+      };
+
+      if (!response.ok || !result.settings?.connectors) {
+        throw new Error(result.error ?? "Unable to save connector settings.");
+      }
+
+      setConnectorSettings(result.settings.connectors);
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "Unable to save connector settings.",
+        { tone: "error" }
+      );
+    } finally {
+      setSavingConnectorId("");
+    }
+  }
+
+  function handleAttachNotebookSources(sourceIds: string[]) {
+    setAttachingNotebookSources(true);
+    markGeneratedDeckStale();
+
+    try {
+      const selected = NOTEBOOKLM_SAMPLE_SOURCES.filter((source) =>
+        sourceIds.includes(source.id)
+      );
+      const documents = selected.map((source) =>
+        createSourceDocument(source.name, source.text, source.type)
+      );
+      const nextDocuments = mergeSourceDocuments(sourceDocuments, documents);
+
+      setSourceDocuments(nextDocuments);
+      setNotebookPickerOpen(false);
+      setNotice(
+        `${documents.length} notebook source${
+          documents.length === 1 ? "" : "s"
+        } attached as planner evidence. These are example sources until NotebookLM Enterprise credentials are connected.`
+      );
+    } finally {
+      setAttachingNotebookSources(false);
+    }
+  }
+
+  async function handleAddActionPreset(type: ActionPresetType, text: string) {
+    setSavingActionPreset(true);
+
+    try {
+      const response = await fetch("/api/action-presets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, text })
+      });
+      const result = (await response.json()) as {
+        custom?: ActionPresets;
+        error?: string;
+      };
+
+      if (!response.ok || !result.custom) {
+        throw new Error(result.error ?? "Unable to save the quick pick.");
+      }
+
+      setCustomActionPresets(result.custom);
+      setNotice("Quick pick saved. Creators see it in step two immediately.");
+    } catch (error) {
+      setNotice(
+        error instanceof Error ? error.message : "Unable to save the quick pick.",
+        { tone: "error" }
+      );
+    } finally {
+      setSavingActionPreset(false);
+    }
+  }
+
+  async function handleRemoveActionPreset(type: ActionPresetType, text: string) {
+    setRemovingActionPreset(`${type}:${text}`);
+
+    try {
+      const response = await fetch("/api/action-presets", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, text })
+      });
+      const result = (await response.json()) as {
+        custom?: ActionPresets;
+        error?: string;
+      };
+
+      if (!response.ok || !result.custom) {
+        throw new Error(result.error ?? "Unable to remove the quick pick.");
+      }
+
+      setCustomActionPresets(result.custom);
+      setNotice("Quick pick removed.");
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "Unable to remove the quick pick.",
+        { tone: "error" }
+      );
+    } finally {
+      setRemovingActionPreset("");
+    }
+  }
+
+  async function handleDeleteClientProfile(profileId: string) {
+    setDeletingClientProfileId(profileId);
+
+    try {
+      const response = await fetch("/api/client-profiles", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profileId })
+      });
+      const result = (await response.json()) as {
+        profiles?: ClientProfile[];
+        error?: string;
+      };
+
+      if (!response.ok || !result.profiles) {
+        throw new Error(result.error ?? "Unable to delete the client profile.");
+      }
+
+      setCustomClientProfiles(result.profiles);
+
+      if (selectedClientProfileId === profileId) {
+        setSelectedClientProfileId("");
+      }
+
+      setNotice(
+        "Saved client removed. The context and metrics entered below are unchanged."
+      );
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "Unable to delete the client profile.",
+        { tone: "error" }
+      );
+    } finally {
+      setDeletingClientProfileId("");
+    }
   }
 
   function handleClientProfileContextChange(value: string) {
@@ -2455,6 +2852,18 @@ export default function Home() {
 
                 {settingsSection === "brand" && (
                   <>
+                    <WorkspaceModeCard
+                      presentationMode={presentationMode}
+                      saving={savingPresentationMode}
+                      onSelectMode={handleSelectPresentationMode}
+                    />
+
+                    <ConnectorSettingsCard
+                      connectorSettings={connectorSettings}
+                      savingConnectorId={savingConnectorId}
+                      onToggleConnector={handleToggleConnector}
+                    />
+
                     <BrandContractPanel
                       brandContract={activeBrandContract}
                       templateFileName={templateFileName}
@@ -2564,6 +2973,7 @@ export default function Home() {
                 )}
 
                 {settingsSection === "recipes" && (
+                  <>
                   <AdminRecipeBuilder
                     brandContract={activeBrandContract}
                     customRecipes={customRecipes}
@@ -2577,6 +2987,15 @@ export default function Home() {
                     onCreateRecipe={handleCreateCustomRecipe}
                     onDeleteRecipe={handleDeleteCustomRecipe}
                   />
+
+                  <ActionPresetManager
+                    customPresets={customActionPresets}
+                    savingPreset={savingActionPreset}
+                    removingPreset={removingActionPreset}
+                    onAddPreset={handleAddActionPreset}
+                    onRemovePreset={handleRemoveActionPreset}
+                  />
+                  </>
                 )}
               </>
             ) : (
@@ -2682,15 +3101,34 @@ export default function Home() {
                 {activeCreatorStep === "context" && (
                   <div key="context" className="workflow-step-panel space-y-4">
                     <ClientProfilePanel
+                      presentationMode={presentationMode}
+                      profiles={visibleClientProfiles}
+                      showingExamples={showingExampleClientProfiles}
                       selectedProfileId={selectedClientProfileId}
                       profileContext={clientProfileContext}
                       workflowBusy={workflowBusy}
+                      canSaveProfile={Boolean(
+                        cleanSnapshotValue(businessSnapshot.client_name)
+                      )}
+                      saveIsUpdate={customClientProfiles.some(
+                        (profile) =>
+                          profile.id ===
+                          clientProfileIdFromName(
+                            cleanSnapshotValue(businessSnapshot.client_name)
+                          )
+                      )}
+                      savingProfile={savingClientProfile}
+                      deletingProfileId={deletingClientProfileId}
                       onSelectProfile={handleSelectClientProfile}
                       onProfileContextChange={handleClientProfileContextChange}
                       onClearProfile={handleClearClientProfile}
+                      onSaveCurrentClient={handleSaveCurrentClient}
+                      onDeleteProfile={handleDeleteClientProfile}
                     />
 
                     <BusinessDataCard
+                      presentationMode={presentationMode}
+                      actionPresets={actionPresets}
                       businessSnapshot={businessSnapshot}
                       kpiSummary={kpiSummary}
                       workflowBusy={workflowBusy}
@@ -2699,10 +3137,17 @@ export default function Home() {
                       onImportMetricFile={handleImportMetricFile}
                       onClearMetricImport={handleClearMetricImport}
                       onSnapshotChange={handleBusinessSnapshotChange}
+                      onWorkflowMetricsChange={handleWorkflowMetricsChange}
                       onUseExample={handleUseExampleSnapshot}
                     />
 
                     <ConnectedContextPanel
+                      connectorSettings={connectorSettings}
+                      notebookPickerOpen={notebookPickerOpen}
+                      attachingNotebookSources={attachingNotebookSources}
+                      onOpenNotebookPicker={() => setNotebookPickerOpen(true)}
+                      onCloseNotebookPicker={() => setNotebookPickerOpen(false)}
+                      onAttachNotebookSources={handleAttachNotebookSources}
                       googleDriveStatus={googleDriveStatus}
                       activeGoogleSourceType={activeGoogleSourceType}
                       googleDriveQuery={googleDriveQuery}
@@ -2749,9 +3194,12 @@ export default function Home() {
                         </Button>
                         {!dataReady && (
                           <p className="text-xs font-semibold leading-5 text-[#A05A00]">
-                            To continue, drop a BI export, fill the snapshot
-                            (client, period, active users, licensed users,
-                            adoption score), pick a profile, or attach context.
+                            To continue, drop a metrics export, fill the snapshot
+                            ({presentationMode === "internal"
+                              ? "who it's for"
+                              : "client"}
+                            , period, active users, adoption score), pick a
+                            profile, or attach context.
                           </p>
                         )}
                       </div>

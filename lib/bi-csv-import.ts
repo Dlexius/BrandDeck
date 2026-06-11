@@ -13,8 +13,11 @@ import { parseBusinessMetricRows } from "@/lib/metric-snapshot-adapter";
 export type ImportedMetricRow = AdoptionCsvRow &
   Record<string, string | number | null | undefined>;
 
+export type BiMetricSourceFormat = "csv" | "tsv" | "text" | "pdf" | "pptx";
+
 export type BiMetricImport = {
   fileName: string;
+  sourceFormat: BiMetricSourceFormat;
   rows: ImportedMetricRow[];
   clientName: string;
   periods: string[];
@@ -27,6 +30,12 @@ export type BiMetricImport = {
 
 export type StandardField = keyof typeof STANDARD_FIELD_LABELS;
 
+/**
+ * Standard adoption fields. Workflow-specific counts (daily logs, RFIs,
+ * inspections, tickets, ...) are intentionally NOT standard fields - they
+ * import as flexible workflow metric columns so the intake works for any
+ * product's workflows, not one vendor's tool names.
+ */
 export const STANDARD_FIELD_LABELS = {
   client_name: "Client",
   report_period: "Period",
@@ -35,9 +44,6 @@ export const STANDARD_FIELD_LABELS = {
   adoption_score: "Adoption Score",
   projects_active: "Active Projects",
   mobile_usage_rate: "Mobile Usage",
-  daily_logs_count: "Daily Logs",
-  rfi_count: "RFIs",
-  submittals_count: "Submittals",
   top_feature: "Top Workflow",
   lowest_feature: "Lowest Workflow",
   risk_summary: "Risk Summary",
@@ -50,7 +56,6 @@ const ADOPTION_REQUIRED_FIELDS: StandardField[] = [
   "client_name",
   "report_period",
   "active_users",
-  "licensed_users",
   "adoption_score"
 ];
 
@@ -173,29 +178,6 @@ const STANDARD_FIELD_SYNONYMS: Array<{
     ]
   },
   {
-    field: "daily_logs_count",
-    headers: [
-      "daily logs count",
-      "daily log count",
-      "daily logs created",
-      "daily logs"
-    ]
-  },
-  {
-    field: "rfi_count",
-    headers: ["rfi count", "rfis created", "total rfis", "open rfis", "rfis", "rfi"]
-  },
-  {
-    field: "submittals_count",
-    headers: [
-      "submittals count",
-      "submittal count",
-      "submittals created",
-      "total submittals",
-      "submittals"
-    ]
-  },
-  {
     field: "top_feature",
     headers: [
       "top feature",
@@ -266,6 +248,21 @@ const MONTHS = [
   "december"
 ];
 
+const POWERBI_SUMMARY_COLUMNS = [
+  "total_records",
+  "past_90_records",
+  "projects",
+  "tools",
+  "email_domains",
+  "users"
+] as const;
+
+type PowerBiSummaryColumn = (typeof POWERBI_SUMMARY_COLUMNS)[number];
+
+type PowerBiSummaryRow = Partial<Record<PowerBiSummaryColumn, number>> & {
+  tool: string;
+};
+
 function normalizeHeader(header: string) {
   return header
     .toLowerCase()
@@ -284,6 +281,38 @@ function normalizeMetricKey(header: string) {
 
 function compactText(value: string) {
   return value.replace(/\s+/g, " ").trim();
+}
+
+export function inferBiMetricSourceFormat(
+  fileName: string,
+  mimeType = ""
+): BiMetricSourceFormat {
+  const lowerName = fileName.toLowerCase();
+  const lowerMime = mimeType.toLowerCase();
+
+  if (lowerName.endsWith(".pdf") || lowerMime.includes("pdf")) {
+    return "pdf";
+  }
+
+  if (
+    lowerName.endsWith(".pptx") ||
+    lowerMime.includes("presentationml.presentation")
+  ) {
+    return "pptx";
+  }
+
+  if (
+    lowerName.endsWith(".tsv") ||
+    lowerMime.includes("tab-separated-values")
+  ) {
+    return "tsv";
+  }
+
+  if (lowerName.endsWith(".txt") || lowerMime.includes("text/plain")) {
+    return "text";
+  }
+
+  return "csv";
 }
 
 function toNumber(value: string) {
@@ -433,7 +462,7 @@ function scaleFractionColumn(values: number[]) {
 
 export function importBiMetricCsv(
   text: string,
-  options: { fileName?: string } = {}
+  options: { fileName?: string; sourceFormat?: BiMetricSourceFormat } = {}
 ): BiMetricImport {
   const fileName = options.fileName ?? "BI export";
   const { headers, records } = parseDelimitedText(text);
@@ -472,7 +501,7 @@ export function importBiMetricCsv(
 
   if (mappedColumns.length === 0 && metricColumns.length === 0) {
     throw new Error(
-      "No usable columns found. Include columns like Client, Period, Active Users, Licensed Users, and Adoption Score."
+      "No usable columns found. Include columns like Client, Period, Active Users, and Adoption Score. Licensed Users can be included when available but is optional."
     );
   }
 
@@ -612,15 +641,23 @@ export function importBiMetricCsv(
   );
 
   if (missingRequired.length > 0) {
+    const missingLabels = missingRequired.map(
+      (field) => STANDARD_FIELD_LABELS[field]
+    );
     warnings.push(
-      `Not mapped from the file: ${missingRequired
-        .map((field) => STANDARD_FIELD_LABELS[field])
-        .join(", ")}. Adoption reports need them - type them into the snapshot fields below.`
+      `Not mapped from the file: ${missingLabels.join(", ")}. ${
+        missingLabels.length === 1
+          ? "Adoption reports need this value"
+          : "Adoption reports need these values"
+      } - type ${
+        missingLabels.length === 1 ? "it" : "them"
+      } into the snapshot fields below.`
     );
   }
 
   return {
     fileName,
+    sourceFormat: options.sourceFormat ?? "csv",
     rows,
     clientName: compactText(String(lastRow.client_name ?? "")),
     periods: rows.map((row) => compactText(String(row.report_period ?? ""))).filter(Boolean),
@@ -632,16 +669,521 @@ export function importBiMetricCsv(
   };
 }
 
+function looksDelimitedMetricExport(text: string) {
+  const firstLines = text
+    .replace(/^\uFEFF/, "")
+    .split(/\r?\n/)
+    .map(compactText)
+    .filter(Boolean)
+    .slice(0, 5);
+
+  return firstLines.some((line) => {
+    const commaCount = (line.match(/,/g) ?? []).length;
+    const tabCount = (line.match(/\t/g) ?? []).length;
+    const semicolonCount = (line.match(/;/g) ?? []).length;
+    const pipeCount = (line.match(/\|/g) ?? []).length;
+
+    return Math.max(commaCount, tabCount, semicolonCount, pipeCount) >= 2;
+  });
+}
+
+function cleanPowerBiText(text: string) {
+  return text
+    .replace(/[\uE000-\uF8FF]/g, " ")
+    .replace(/\u00A0/g, " ")
+    .replace(/\r/g, "");
+}
+
+function powerBiLines(text: string) {
+  return cleanPowerBiText(text)
+    .split("\n")
+    .map((line) => line.replace(/[ ]+/g, " ").trim())
+    .filter(Boolean);
+}
+
+function parseHumanNumber(value: string) {
+  const suffixMatch = value.trim().match(/([kmb])$/i);
+  const multiplier = suffixMatch
+    ? suffixMatch[1].toLowerCase() === "k"
+      ? 1_000
+      : suffixMatch[1].toLowerCase() === "m"
+        ? 1_000_000
+        : 1_000_000_000
+    : 1;
+  const cleaned = value
+    .replace(/[kmb]$/i, "")
+    .replace(/[,\s$]/g, "")
+    .trim();
+  const numeric = Number(cleaned);
+
+  return Number.isFinite(numeric) ? numeric * multiplier : Number.NaN;
+}
+
+function partitionSpaceSeparatedNumber(value: string, expectedCount: number) {
+  const groups = value.match(/\d+/g) ?? [];
+
+  if (groups.length === 0) {
+    return [];
+  }
+
+  if (expectedCount <= 1 || groups.length === 1) {
+    return [parseHumanNumber(groups.join(""))];
+  }
+
+  const values: number[] = [];
+  const singleGroupCount = Math.min(expectedCount - 1, groups.length - 1);
+
+  for (let index = 0; index < singleGroupCount; index += 1) {
+    values.push(parseHumanNumber(groups[index]));
+  }
+
+  values.push(parseHumanNumber(groups.slice(singleGroupCount).join("")));
+  return values;
+}
+
+function numberPartsFromCell(cell: string, expectedCount: number) {
+  const cleaned = cell.trim();
+
+  if (!cleaned) {
+    return [];
+  }
+
+  if (
+    !cleaned.includes(",") &&
+    !/[kmb]/i.test(cleaned) &&
+    /^\d+(?:\s+\d+)+$/.test(cleaned)
+  ) {
+    const groups = cleaned.match(/\d+/g) ?? [];
+
+    if (groups.length <= 2) {
+      return [parseHumanNumber(groups.join(""))];
+    }
+
+    return partitionSpaceSeparatedNumber(cleaned, expectedCount);
+  }
+
+  const matches =
+    cleaned.match(/\d+(?:\.\d+)?[kmb]|\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/gi) ??
+    [];
+
+  return matches.map(parseHumanNumber).filter(Number.isFinite);
+}
+
+function expandPowerBiNumericCells(cells: string[], expectedCount: number) {
+  const values: number[] = [];
+
+  cells.forEach((cell, index) => {
+    const remainingSlots = expectedCount - values.length;
+    const remainingCells = cells.length - index - 1;
+    const expectedFromCell = Math.max(1, remainingSlots - remainingCells);
+    const parts = numberPartsFromCell(cell, expectedFromCell);
+
+    values.push(...parts.slice(0, remainingSlots));
+  });
+
+  return values;
+}
+
+function summaryValuesFromNumbers(values: number[]) {
+  const result: Partial<Record<PowerBiSummaryColumn, number>> = {};
+
+  if (values.length >= POWERBI_SUMMARY_COLUMNS.length) {
+    POWERBI_SUMMARY_COLUMNS.forEach((column, index) => {
+      result[column] = values[index];
+    });
+    return result;
+  }
+
+  if (values.length === 3 && values[2] === 1) {
+    result.total_records = values[0];
+    result.past_90_records = values[1];
+    result.tools = values[2];
+    return result;
+  }
+
+  values.forEach((value, index) => {
+    const column = POWERBI_SUMMARY_COLUMNS[index];
+
+    if (column) {
+      result[column] = value;
+    }
+  });
+
+  return result;
+}
+
+function parsePowerBiSummaryLine(line: string): PowerBiSummaryRow | null {
+  const cells = line
+    .split(/\t+/)
+    .map(compactText)
+    .filter(Boolean);
+  let tool = "";
+  let numericCells: string[] = [];
+
+  if (cells.length >= 2) {
+    [tool, ...numericCells] = cells;
+  } else {
+    const match = line.match(/^([A-Za-z][A-Za-z0-9&/() -]{1,64}?)\s{2,}(.+)$/);
+
+    if (!match) {
+      return null;
+    }
+
+    tool = compactText(match[1]);
+    numericCells = [match[2]];
+  }
+
+  if (
+    !tool ||
+    /^(tool|total records|past 90|projects|leaderboard|date)$/i.test(tool)
+  ) {
+    return null;
+  }
+
+  const numbers = expandPowerBiNumericCells(
+    numericCells,
+    POWERBI_SUMMARY_COLUMNS.length
+  );
+
+  if (numbers.length < 2) {
+    return null;
+  }
+
+  return {
+    tool,
+    ...summaryValuesFromNumbers(numbers)
+  };
+}
+
+function parsePowerBiSummaryRows(lines: string[]) {
+  const rows: PowerBiSummaryRow[] = [];
+  let inSummary = false;
+
+  for (const line of lines) {
+    if (
+      /total records/i.test(line) &&
+      /past 90/i.test(line) &&
+      /projects/i.test(line) &&
+      /users/i.test(line)
+    ) {
+      inSummary = true;
+      continue;
+    }
+
+    if (!inSummary) {
+      continue;
+    }
+
+    const row = parsePowerBiSummaryLine(line);
+
+    if (!row) {
+      continue;
+    }
+
+    rows.push(row);
+
+    if (/^total$/i.test(row.tool)) {
+      break;
+    }
+  }
+
+  return rows;
+}
+
+function extractPowerBiCompany(lines: string[]) {
+  for (let index = 0; index < lines.length; index += 1) {
+    if (/^company$/i.test(lines[index])) {
+      const next = lines[index + 1];
+
+      if (next && !/^(projects|records|fields to show)$/i.test(next)) {
+        return next;
+      }
+    }
+  }
+
+  const inline = lines
+    .join(" ")
+    .match(/Company\s+(.{2,120}?)\s+(?:Projects|Records|Fields to Show)/i);
+
+  return inline ? compactText(inline[1]) : "";
+}
+
+function extractPowerBiDateRange(text: string) {
+  const range = cleanPowerBiText(text).match(
+    /(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}\/\d{1,2}\/\d{4})(?:\s+Start Date\s*-\s*End Date)?/i
+  );
+
+  return range ? `${range[1]} - ${range[2]}` : "";
+}
+
+function powerBiMetricKey(tool: string, suffix: string) {
+  return `${normalizeMetricKey(tool)}_${suffix}`;
+}
+
+function powerBiHeaderLabel(key: string) {
+  return key
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function formatSourceName(sourceFormat: BiMetricSourceFormat) {
+  return sourceFormat === "pptx"
+    ? "PPTX"
+    : sourceFormat === "pdf"
+      ? "PDF"
+      : "text";
+}
+
+function importPowerBiReportText(
+  text: string,
+  options: { fileName?: string; sourceFormat?: BiMetricSourceFormat } = {}
+): BiMetricImport {
+  const fileName = options.fileName ?? "Power BI export";
+  const sourceFormat = options.sourceFormat ?? "text";
+  const lines = powerBiLines(text);
+
+  if (
+    /addinsinstallpage|relaunch the add-in|after you install the add-in/i.test(
+      text
+    )
+  ) {
+    throw new Error(
+      "This PPTX only contains the Microsoft Power BI add-in handoff, not report data. Export the actual report pages as PDF, or export the table behind the visual as CSV."
+    );
+  }
+
+  const summaryRows = parsePowerBiSummaryRows(lines);
+
+  if (summaryRows.length === 0) {
+    throw new Error(
+      `No readable Power BI metric table was found in ${fileName}. Use a PDF/PPTX export with selectable report text, or export the underlying visual data as CSV.`
+    );
+  }
+
+  const totalRow = summaryRows.find((row) => /^total$/i.test(row.tool));
+  const toolRows = summaryRows
+    .filter((row) => !/^total$/i.test(row.tool))
+    .filter((row) => Number.isFinite(row.total_records))
+    .sort((a, b) => (b.total_records ?? 0) - (a.total_records ?? 0));
+  const lowestTool = [...toolRows]
+    .filter((row) => (row.total_records ?? 0) > 0)
+    .sort((a, b) => (a.total_records ?? 0) - (b.total_records ?? 0))[0];
+  const clientName = extractPowerBiCompany(lines);
+  const period = extractPowerBiDateRange(text) || "Power BI export";
+  const row: ImportedMetricRow = {
+    client_name: clientName,
+    report_period: period,
+    top_feature: toolRows[0]?.tool,
+    lowest_feature: lowestTool?.tool,
+    risk_summary:
+      "Power BI export loaded workflow activity; confirm any adoption score before making score-based claims.",
+    recommendation_1:
+      "Confirm the adoption score or use the deck prompt to frame this as workflow activity instead of scorecard coverage.",
+    recommendation_2:
+      "Use the highest-volume workflows to focus enablement and executive discussion.",
+    recommendation_3:
+      "Review the lowest-volume workflow for ownership, training, or configuration gaps."
+  };
+  const metricColumns: Array<{ header: string; key: string }> = [];
+
+  if (Number.isFinite(totalRow?.users)) {
+    row.active_users = totalRow?.users;
+  }
+
+  if (Number.isFinite(totalRow?.projects)) {
+    row.projects_active = totalRow?.projects;
+  }
+
+  toolRows.slice(0, 12).forEach((summaryRow, index) => {
+    const recordsKey = powerBiMetricKey(summaryRow.tool, "records");
+    row[recordsKey] = Math.round(summaryRow.total_records ?? 0);
+
+    if (index < 8) {
+      metricColumns.push({
+        header: `${summaryRow.tool} Records`,
+        key: recordsKey
+      });
+    }
+
+    if (Number.isFinite(summaryRow.past_90_records)) {
+      row[powerBiMetricKey(summaryRow.tool, "past_90_records")] = Math.round(
+        summaryRow.past_90_records ?? 0
+      );
+    }
+
+    if (Number.isFinite(summaryRow.users)) {
+      row[powerBiMetricKey(summaryRow.tool, "users")] = Math.round(
+        summaryRow.users ?? 0
+      );
+    }
+  });
+
+  const aggregateMetrics: Array<{
+    sourceKey: PowerBiSummaryColumn;
+    rowKey: string;
+    header: string;
+  }> = [
+    {
+      sourceKey: "total_records",
+      rowKey: "total_records",
+      header: "Total Records"
+    },
+    {
+      sourceKey: "past_90_records",
+      rowKey: "past_90_records",
+      header: "Past 90 Records"
+    },
+    {
+      sourceKey: "tools",
+      rowKey: "tool_count",
+      header: "Tool Count"
+    },
+    {
+      sourceKey: "email_domains",
+      rowKey: "email_domain_count",
+      header: "Email Domain Count"
+    }
+  ];
+
+  aggregateMetrics.forEach(({ sourceKey, rowKey, header }) => {
+    const value = totalRow?.[sourceKey];
+
+    if (Number.isFinite(value)) {
+      row[rowKey] = Math.round(value ?? 0);
+      metricColumns.push({ header, key: rowKey });
+    }
+  });
+
+  const rows = [row];
+  const mappedColumns: Array<{ header: string; field: StandardField }> = [];
+
+  if (row.client_name) {
+    mappedColumns.push({ header: "Company", field: "client_name" });
+  }
+
+  mappedColumns.push({ header: "Start Date - End Date", field: "report_period" });
+
+  if (row.active_users !== undefined) {
+    mappedColumns.push({ header: "Users", field: "active_users" });
+  }
+
+  if (row.projects_active !== undefined) {
+    mappedColumns.push({ header: "Projects", field: "projects_active" });
+  }
+
+  const snapshots = parseBusinessMetricRows(rows, {
+    source: `BI ${formatSourceName(sourceFormat)} export: ${fileName}`
+  });
+  const metricCount = snapshots.reduce(
+    (total, snapshot) => total + snapshot.metrics.length,
+    0
+  );
+  const warnings: string[] = [
+    `Extracted a Power BI ${formatSourceName(
+      sourceFormat
+    )} summary as a single metric snapshot. Table visuals become workflow evidence; page filters become client/period context when readable.`
+  ];
+  const missingRequired = ADOPTION_REQUIRED_FIELDS.filter(
+    (field) => !compactText(String(row[field] ?? ""))
+  );
+
+  if (missingRequired.length > 0) {
+    const missingLabels = missingRequired.map(
+      (field) => STANDARD_FIELD_LABELS[field]
+    );
+    warnings.push(
+      `Not mapped from the ${formatSourceName(sourceFormat)}: ${missingLabels.join(
+        ", "
+      )}. ${
+        missingLabels.length === 1
+          ? "Adoption reports need this value"
+          : "Adoption reports need these values"
+      } - type ${
+        missingLabels.length === 1 ? "it" : "them"
+      } into the snapshot fields below.`
+    );
+  }
+
+  if (metricCount === 0) {
+    throw new Error(
+      `No numeric metrics were found in ${fileName}. Export the underlying visual data as CSV, or use a PDF with selectable table text.`
+    );
+  }
+
+  return {
+    fileName,
+    sourceFormat,
+    rows,
+    clientName,
+    periods: [period],
+    mappedColumns,
+    metricColumns,
+    ignoredColumns: [],
+    metricCount,
+    warnings
+  };
+}
+
+export function importBiMetricExportText(
+  text: string,
+  options: { fileName?: string; sourceFormat?: BiMetricSourceFormat } = {}
+): BiMetricImport {
+  const sourceFormat =
+    options.sourceFormat ??
+    inferBiMetricSourceFormat(options.fileName ?? "BI export");
+  const shouldParseDelimited =
+    sourceFormat === "csv" ||
+    sourceFormat === "tsv" ||
+    (sourceFormat === "text" && looksDelimitedMetricExport(text));
+
+  if (shouldParseDelimited) {
+    return importBiMetricCsv(text, {
+      fileName: options.fileName,
+      sourceFormat
+    });
+  }
+
+  return importPowerBiReportText(text, {
+    fileName: options.fileName,
+    sourceFormat
+  });
+}
+
+// Power BI leaderboards routinely track dozens of workflows; keep room for
+// them and let the highest-volume rows win when an export exceeds the cap.
+const MAX_FORM_WORKFLOW_METRICS = 24;
+
+/**
+ * "daily_logs_count" → "Daily Logs Count"; human headers pass through. The
+ * label must normalize back to the import's column key so later form edits
+ * update the same imported value instead of creating a duplicate metric.
+ */
+function workflowLabelFromHeader(header: string) {
+  const cleaned = compactText(header);
+
+  if (!/^[a-z0-9_]+$/.test(cleaned)) {
+    return cleaned;
+  }
+
+  return cleaned.replace(/_/g, " ").replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
 /**
  * Snapshot-form values mirroring an imported series: the latest row fills the
- * current fields and the prior row fills the trend baseline fields.
+ * current fields, the prior row fills the trend baseline fields, and numeric
+ * count columns become editable workflow metric rows.
  */
 export function businessSnapshotFromImport(
-  rows: ImportedMetricRow[]
-): Record<string, string> {
+  imported: Pick<BiMetricImport, "rows" | "metricColumns">
+): Record<string, string> & {
+  workflow_metrics?: Array<{ label: string; count: string }>;
+} {
+  const rows = imported.rows;
   const current = rows[rows.length - 1] ?? {};
   const prior = rows.length > 1 ? rows[rows.length - 2] : undefined;
-  const patch: Record<string, string> = {};
+  const patch: Record<string, string> & {
+    workflow_metrics?: Array<{ label: string; count: string }>;
+  } = {};
 
   const fieldText = (row: Record<string, unknown> | undefined, key: string) => {
     const value = row?.[key];
@@ -654,6 +1196,28 @@ export function businessSnapshotFromImport(
     if (value) {
       patch[field] = value;
     }
+  }
+
+  // Numeric count columns surface as editable workflow metrics; rate-style
+  // columns stay import-only evidence because workflow rows render as counts.
+  const workflowMetrics = imported.metricColumns
+    .filter(({ key }) => !looksLikeRateKey(key))
+    .flatMap(({ header, key }) => {
+      const value = current[key];
+      const numeric =
+        typeof value === "number" ? value : toNumber(String(value ?? ""));
+
+      if (!Number.isFinite(numeric)) {
+        return [];
+      }
+
+      return [{ label: workflowLabelFromHeader(header), count: String(numeric) }];
+    })
+    .sort((a, b) => Number(b.count) - Number(a.count))
+    .slice(0, MAX_FORM_WORKFLOW_METRICS);
+
+  if (workflowMetrics.length > 0) {
+    patch.workflow_metrics = workflowMetrics;
   }
 
   if (prior) {
@@ -674,6 +1238,51 @@ export function businessSnapshotFromImport(
   }
 
   return patch;
+}
+
+/**
+ * Apply the edited workflow-metric list onto an imported series: values land
+ * on the latest row under normalized label keys, and metrics the creator
+ * removed are deleted so they stop flowing into the deck.
+ */
+export function applyWorkflowMetricsToImportedRows(
+  rows: ImportedMetricRow[],
+  previousMetrics: Array<{ label: string; count: string }>,
+  nextMetrics: Array<{ label: string; count: string }>
+): ImportedMetricRow[] {
+  if (rows.length === 0) {
+    return rows;
+  }
+
+  const reservedKeys = new Set<string>(Object.keys(STANDARD_FIELD_LABELS));
+  const keyFor = (label: string) => normalizeMetricKey(compactText(label));
+  const nextKeys = new Map(
+    nextMetrics
+      .map((metric) => [keyFor(metric.label), compactText(metric.count)] as const)
+      .filter(([key, count]) => key && count && !reservedKeys.has(key))
+  );
+  const removedKeys = previousMetrics
+    .map((metric) => keyFor(metric.label))
+    .filter((key) => key && !nextKeys.has(key) && !reservedKeys.has(key));
+
+  return rows.map((row, index) => {
+    if (index !== rows.length - 1) {
+      return row;
+    }
+
+    const next: ImportedMetricRow = { ...row };
+
+    for (const key of removedKeys) {
+      delete next[key];
+    }
+
+    for (const [key, count] of nextKeys) {
+      const numeric = toNumber(count);
+      next[key] = Number.isFinite(numeric) ? numeric : count;
+    }
+
+    return next;
+  });
 }
 
 const PRIOR_FIELD_TO_ROW_FIELD: Record<string, StandardField> = {

@@ -4,6 +4,22 @@ import { ApprovedLayoutId, BrandContract, DeckPlan, SourceDocument } from "@/lib
 import { defaultBrandContract } from "@/lib/ui-constants";
 import { ValidationReport } from "@/lib/validateDeckPlan";
 
+/**
+ * One creator-named workflow measurement (e.g. "Inspections" / 412). Labels
+ * are free text so any product's workflows can be tracked - nothing in the
+ * intake is tied to one vendor's tool names.
+ */
+export type WorkflowMetricEntry = {
+  label: string;
+  count: string;
+};
+
+/** Snapshot fields edited as plain text inputs (everything but the list). */
+export type BusinessSnapshotTextField = Exclude<
+  keyof BusinessSnapshotState,
+  "workflow_metrics"
+>;
+
 export type BusinessSnapshotState = {
   client_name: string;
   report_period: string;
@@ -16,9 +32,7 @@ export type BusinessSnapshotState = {
   projects_active: string;
   mobile_usage_rate: string;
   previous_mobile_usage_rate: string;
-  daily_logs_count: string;
-  rfi_count: string;
-  submittals_count: string;
+  workflow_metrics: WorkflowMetricEntry[];
   top_feature: string;
   lowest_feature: string;
   risk_summary: string;
@@ -245,6 +259,31 @@ export type RecipeBuilderState = {
 };
 
 export type WorkspaceView = "generate" | "settings";
+
+/**
+ * Workspace-level framing for step two: "client" presents to external
+ * clients/accounts; "internal" presents to the company's own teams.
+ */
+export type PresentationMode = "client" | "internal";
+
+/** Quick-pick lists for the Risks and actions section of step two. */
+export type ActionPresets = {
+  risks: string[];
+  recommendations: string[];
+};
+
+export type ActionPresetType = keyof ActionPresets;
+
+/** Connector ids the admin can show or hide for creators. */
+export type ConnectorId =
+  | "googleDrive"
+  | "notebooklm"
+  | "dropbox"
+  | "box"
+  | "salesforce"
+  | "github";
+
+export type ConnectorSettings = Record<ConnectorId, boolean>;
 
 export type SettingsSection =
   | "overview"

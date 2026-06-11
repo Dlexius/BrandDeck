@@ -43,6 +43,11 @@ export type AdoptionCsvRow = {
   recommendation_1?: string;
   recommendation_2?: string;
   recommendation_3?: string;
+  /**
+   * Creator-named workflow metrics and BI-export context columns travel as
+   * extra keys; the context pack turns them into flexible metric evidence.
+   */
+  [key: string]: string | number | null | undefined;
 };
 
 type NormalizedRow = {
@@ -256,13 +261,17 @@ function hasUsableMetricRows(rows: AdoptionCsvRow[]) {
 
 function fallbackRowFromContextPack(
   contextPack: ContextPack | undefined,
-  recipe: DeckRecipe
+  recipe: DeckRecipe,
+  brandContract: BrandContract
 ): AdoptionCsvRow {
   const latestRow = latestContextMetricRow(contextPack) as AdoptionCsvRow | undefined;
+  // With no client or audience anywhere (internal decks, source-only decks),
+  // the cover title falls back to the presenting company - never a
+  // placeholder like "Selected Client" that could ship on a real slide.
   const clientName =
     latestRow?.client_name ??
     contextPack?.clientProfile?.name ??
-    "Selected Client";
+    brandContract.companyName;
   const reportPeriod =
     latestRow?.report_period ??
     contextPack?.metricSnapshots[contextPack.metricSnapshots.length - 1]?.period ??
@@ -663,15 +672,15 @@ function metricContextForRecipe(
   }
 
   if (recipe.recipe_id === "executive_adoption_update") {
-    return `${adoptionRate}% licensed coverage across ${current.projects_active} active projects.`;
+    return `${current.active_users} active users across ${current.projects_active} active projects.`;
   }
 
   if (recipe.recipe_id === "risk_remediation_plan") {
-    return `${adoptionRate}% coverage; ${current.projects_active} projects need consistent workflow ownership.`;
+    return `${current.projects_active} projects need consistent workflow ownership.`;
   }
 
   if (recipe.recipe_id === "quarterly_business_review") {
-    return `${adoptionRate}% licensed coverage frames the quarterly value and renewal conversation.`;
+    return `${current.active_users} active users frame the quarterly value and renewal conversation.`;
   }
 
   if (recipe.recipe_id === "product_update_deck") {
@@ -682,7 +691,7 @@ function metricContextForRecipe(
     return "Metrics summarize current adoption signals for the requested brief.";
   }
 
-  return `${adoptionRate}% of licensed users are active across ${current.projects_active} active projects.`;
+  return `${current.active_users} active users across ${current.projects_active} active projects.`;
 }
 
 function trendSummaryForRecipe(
@@ -1574,20 +1583,20 @@ export function generateDeckPlan(
 
   if (sourceRows.length === 0 && recipeRequiresAccountMetrics(recipe)) {
     throw new Error(
-      `${recipe.name} needs client, period, active user, licensed user, and adoption score metrics. Add a metrics snapshot or choose a source-only deck type.`
+      `${recipe.name} needs client, period, active user, and adoption score metrics. Add a metrics snapshot or choose a source-only deck type.`
     );
   }
 
   if (!hasAccountMetrics && recipeRequiresAccountMetrics(recipe)) {
     throw new Error(
-      `${recipe.name} needs adoption/account metrics before BrandDeck can generate the deck. Add a metrics snapshot with client name, period, active users, licensed users, and adoption score.`
+      `${recipe.name} needs adoption/account metrics before BrandDeck can generate the deck. Add a metrics snapshot with client name, period, active users, and adoption score.`
     );
   }
 
   const rowsForPlanning =
     sourceRows.length > 0
       ? sourceRows
-      : [fallbackRowFromContextPack(options.contextPack, recipe)];
+      : [fallbackRowFromContextPack(options.contextPack, recipe, brandContract)];
   const inputRows = rowsForPlanning.map(normalizeRow);
   const latestInputRow = inputRows[inputRows.length - 1];
   const rowsWithMetricSignal = inputRows.filter(hasMetricSignal);

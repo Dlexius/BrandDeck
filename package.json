@@ -10,12 +10,14 @@
     "test:quality": "vitest run tests/export-quality.test.ts"
   },
   "dependencies": {
+    "@clerk/nextjs": "^7.5.1",
     "clsx": "^2.1.1",
     "jszip": "^3.10.1",
     "lucide-react": "^0.468.0",
     "next": "^15.1.0",
     "openai": "^6.42.0",
     "papaparse": "^5.4.1",
+    "pdf-parse": "^2.4.5",
     "pptxgenjs": "^3.12.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

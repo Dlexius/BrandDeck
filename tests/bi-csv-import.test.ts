@@ -3,6 +3,7 @@ import brandContractData from "@/data/brand-contract.json";
 import {
   applySnapshotFieldToImportedRows,
   businessSnapshotFromImport,
+  importBiMetricExportText,
   importBiMetricCsv,
   periodSortValue
 } from "@/lib/bi-csv-import";
@@ -13,6 +14,8 @@ import {
 } from "@/lib/context-pack-schema";
 import type { BrandContract } from "@/lib/deck-plan-schema";
 import { generateDeckPlan } from "@/lib/generateDeckPlan";
+import { EMPTY_BUSINESS_SNAPSHOT } from "@/lib/ui-constants";
+import { businessSnapshotToRows } from "@/lib/ui-helpers";
 import { validateDeckPlan } from "@/lib/validateDeckPlan";
 
 const brandContract = brandContractData as unknown as BrandContract;
@@ -23,6 +26,25 @@ const powerBiStyleCsv = [
   '"Harborview Civil Partners","May 2026",213,325,0.73,23,0.59,262,330,1610,Northwest',
   '"Harborview Civil Partners","June 2026",244,325,0.76,24,0.61,286,350,1825,Northwest'
 ].join("\r\n");
+
+const powerBiPdfText = `
+Leaderboard Summary
+Tool
+Total Records Past 90 \tProjects Tools Email Domains \tUsers
+Action Plan \t6,295 \t503 \t310 \t1 \t8 \t88
+Analytics \t83,001 \t33,498 \t1
+Daily Log \t469,998 \t90,658 \t1,606 \t1 \t64 \t626
+Document \t1,847,772 \t334,547 \t6,091 \t1 \t244 1,091
+Drawing \t1,385,555 \t257,689 \t1,617 \t1 \t30 \t220
+Instruction \t1 \t1 \t1 \t1 \t1
+RFI \t37 621 \t7 933 \t1 162 \t1 \t352 1 245
+Total \t4,699,504 884,221 \t10,116 \t41 \t598 3,109
+Company
+21 Companies Selected
+Date
+5/22/2025 \t6/10/2026
+Start Date - End Date
+`;
 
 describe("bi-csv-import column mapping", () => {
   it("auto-maps flexible BI headers onto standard adoption fields", () => {
@@ -42,13 +64,18 @@ describe("bi-csv-import column mapping", () => {
     expect(mappedFields).toContain("adoption_score");
     expect(mappedFields).toContain("projects_active");
     expect(mappedFields).toContain("mobile_usage_rate");
-    expect(mappedFields).toContain("rfi_count");
-    expect(mappedFields).toContain("submittals_count");
+
+    // Workflow counts are vendor-specific, so they import as flexible
+    // workflow metric columns instead of standard fields.
+    const metricKeys = imported.metricColumns.map((column) => column.key);
+    expect(metricKeys).toContain("rfis_created");
+    expect(metricKeys).toContain("submittals");
 
     const current = imported.rows[2];
     expect(current.active_users).toBe(244);
     expect(current.licensed_users).toBe(325);
-    expect(current.rfi_count).toBe(286);
+    expect(current.rfis_created).toBe(286);
+    expect(current.submittals).toBe(350);
   });
 
   it("scales fraction-form rate columns to 0-100 percentages", () => {
@@ -175,6 +202,45 @@ describe("bi-csv-import row handling", () => {
   });
 });
 
+describe("Power BI PDF/PPTX export import", () => {
+  it("normalizes a text-bearing Power BI PDF table into metric rows", () => {
+    const imported = importBiMetricExportText(powerBiPdfText, {
+      fileName: "Expanded Adoption Report.pdf",
+      sourceFormat: "pdf"
+    });
+    const row = imported.rows[0];
+
+    expect(imported.sourceFormat).toBe("pdf");
+    expect(imported.clientName).toBe("21 Companies Selected");
+    expect(imported.periods).toEqual(["5/22/2025 - 6/10/2026"]);
+    expect(row.active_users).toBe(3109);
+    expect(row.projects_active).toBe(10116);
+    expect(row.document_records).toBe(1847772);
+    expect(row.rfi_records).toBe(37621);
+    expect(row.top_feature).toBe("Document");
+    expect(row.lowest_feature).toBe("Instruction");
+    expect(
+      imported.warnings.some(
+        (warning) =>
+          warning.includes("Adoption Score") &&
+          !warning.includes("Licensed Users")
+      )
+    ).toBe(true);
+  });
+
+  it("rejects a Power BI add-in placeholder PPTX with a clear message", () => {
+    expect(() =>
+      importBiMetricExportText(
+        "Microsoft Power BI\nReturn to your internet browser or copy this link into your browser:\nhttps://pages.store.office.com/addinsinstallpage.aspx\nAfter you install the add-in, you can launch it by choosing the add-in button.",
+        {
+          fileName: "Microsoft-Power-BI-Storytelling.pptx",
+          sourceFormat: "pptx"
+        }
+      )
+    ).toThrow(/add-in handoff/i);
+  });
+});
+
 describe("bi-csv-import downstream integration", () => {
   it("feeds the context pack with adoption metrics and flexible metrics", () => {
     const imported = importBiMetricCsv(powerBiStyleCsv);
@@ -213,10 +279,84 @@ describe("bi-csv-import downstream integration", () => {
   });
 });
 
+describe("no-client fallback", () => {
+  it("uses the presenting company as the cover title, never a placeholder", () => {
+    const deckPlan = generateDeckPlan(
+      "Create a presentation for our internal field operations all-hands.",
+      [],
+      brandContract,
+      { recipeId: "ad_hoc_brand_safe_deck" }
+    );
+
+    expect(deckPlan.client_name).toBe(brandContract.companyName);
+    expect(JSON.stringify(deckPlan)).not.toContain("Selected Client");
+  });
+});
+
+describe("manual workflow metrics", () => {
+  it("flows creator-named workflow counts into deck feature evidence", () => {
+    const snapshot = {
+      ...EMPTY_BUSINESS_SNAPSHOT,
+      client_name: "Lakeside Field Services",
+      report_period: "June 2026",
+      previous_report_period: "May 2026",
+      active_users: "120",
+      previous_active_users: "104",
+      licensed_users: "150",
+      adoption_score: "72",
+      previous_adoption_score: "66",
+      workflow_metrics: [
+        { label: "Inspections", count: "412" },
+        { label: "Work Orders", count: "318" },
+        { label: "Safety Audits", count: "57" }
+      ]
+    };
+    const rows = businessSnapshotToRows(snapshot);
+    const contextPack = buildContextPackFromInputs({ csvRows: rows });
+    const deckPlan = generateDeckPlan(
+      "Create an executive adoption report emphasizing usage growth, workflow gaps, risks, and next steps.",
+      rows,
+      brandContract,
+      { recipeId: "client_adoption_report", contextPack }
+    );
+    const featureSlide = deckPlan.slides.find(
+      (slide) => slide.layout_id === "feature_adoption"
+    );
+    const features = (
+      (featureSlide?.fields.feature_metrics ?? []) as Array<{
+        feature: string;
+      }>
+    ).map((metric) => metric.feature);
+
+    expect(features).toContain("Inspections");
+    expect(features).toContain("Work Orders");
+    // No vendor-specific fallback rows leak into a custom-workflow deck.
+    expect(features).not.toContain("RFIs");
+  });
+
+  it("skips labels that collide with standard fields", () => {
+    const rows = businessSnapshotToRows({
+      ...EMPTY_BUSINESS_SNAPSHOT,
+      client_name: "Lakeside",
+      report_period: "June 2026",
+      active_users: "120",
+      licensed_users: "150",
+      adoption_score: "72",
+      workflow_metrics: [
+        { label: "Active Users", count: "999" },
+        { label: "Inspections", count: "412" }
+      ]
+    });
+
+    expect(rows[0].active_users).toBe("120");
+    expect(rows[0].inspections).toBe("412");
+  });
+});
+
 describe("bi-csv-import snapshot-form sync", () => {
   it("mirrors the latest and prior rows into the snapshot form", () => {
     const imported = importBiMetricCsv(powerBiStyleCsv);
-    const patch = businessSnapshotFromImport(imported.rows);
+    const patch = businessSnapshotFromImport(imported);
 
     expect(patch.client_name).toBe("Harborview Civil Partners");
     expect(patch.report_period).toBe("June 2026");
@@ -225,6 +365,41 @@ describe("bi-csv-import snapshot-form sync", () => {
     expect(patch.previous_report_period).toBe("May 2026");
     expect(patch.previous_active_users).toBe("213");
     expect(patch.previous_adoption_score).toBe("73");
+  });
+
+  it("mirrors numeric count columns into editable workflow metrics", () => {
+    const imported = importBiMetricCsv(powerBiStyleCsv);
+    const patch = businessSnapshotFromImport(imported);
+
+    expect(patch.workflow_metrics).toEqual(
+      expect.arrayContaining([
+        { label: "RFIs Created", count: "286" },
+        { label: "Submittals", count: "350" },
+        { label: "Photos Uploaded", count: "1825" }
+      ])
+    );
+    // Highest-volume workflows lead so they survive the cap on big exports.
+    expect(patch.workflow_metrics?.[0]).toEqual({
+      label: "Photos Uploaded",
+      count: "1825"
+    });
+    // Text columns like Region are evidence, not workflow counts.
+    expect(
+      patch.workflow_metrics?.some((metric) => metric.label === "Region")
+    ).toBe(false);
+  });
+
+  it("keeps room for large Power BI leaderboards", () => {
+    const headers = Array.from({ length: 30 }, (_, i) => `Tool ${i + 1} Records`);
+    const values = Array.from({ length: 30 }, (_, i) => String((i + 1) * 10));
+    const csv = [
+      ["Client", "Period", "Active Users", "Licensed Users", "Adoption Score", ...headers].join(","),
+      ["Harborview", "June 2026", "244", "325", "76", ...values].join(",")
+    ].join("\n");
+    const patch = businessSnapshotFromImport(importBiMetricCsv(csv));
+
+    expect(patch.workflow_metrics).toHaveLength(24);
+    expect(patch.workflow_metrics?.[0].label).toBe("Tool 30 Records");
   });
 
   it("applies current-period edits to the latest row only", () => {

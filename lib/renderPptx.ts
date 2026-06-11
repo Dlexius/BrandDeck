@@ -877,10 +877,13 @@ function renderScorecard(
     { fontSize: 11 }
   );
   const fields = slideDef.fields;
+  const licensedUsers = text(fields.licensed_users);
   const metrics = [
     ["Adoption Score", `${text(fields.adoption_score)}%`, "Current health", "insights"],
     ["Active Users", text(fields.active_users), "Using the platform", "reporting"],
-    ["Licensed Users", text(fields.licensed_users), "Assigned seats", "data"],
+    ...(licensedUsers && licensedUsers !== "0"
+      ? [["Licensed Users", licensedUsers, "Assigned seats", "data"]]
+      : []),
     ["Active Projects", text(fields.projects_active), "Tracked projects", "project_management"],
     ["Mobile Usage", `${text(fields.mobile_usage_rate)}%`, "Field engagement", "mobile"]
   ];

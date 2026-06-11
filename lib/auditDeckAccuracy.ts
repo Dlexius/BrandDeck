@@ -223,7 +223,43 @@ function prioritizedSafeSourceSentences(
     : safeSourceSentences(sourceDocuments, fallbackPattern, limit);
 }
 
-function visibleContainsSentence(deckText: string, sentence: string) {
+const EXPLICIT_SOURCE_ACTION_PATTERN = /^\s*(recommendation|next step|action):/i;
+const FALLBACK_SOURCE_ACTION_PATTERN =
+  /\b(recommend|next step|action|owner|mitigate|enable|train|review)\b/i;
+const EXPLICIT_SOURCE_RISK_PATTERN = /^\s*(risk|blocker|concern|gap|issue):/i;
+const FALLBACK_SOURCE_RISK_PATTERN =
+  /\b(risk|blocker|concern|gap|delay|late|stalled|issue|low|lowest)\b/i;
+
+/**
+ * The exact safe source sentences the grounding audit checks for. Exposed so
+ * the planner can be told up front which lines must stay recognizable, and so
+ * a deterministic repair can restate them without another model call - both
+ * sides of the audit agree because they share these extractors.
+ */
+export function safeSourceFidelityLines(sourceDocuments: SourceDocument[]) {
+  return {
+    actions: prioritizedSafeSourceSentences(
+      sourceDocuments,
+      EXPLICIT_SOURCE_ACTION_PATTERN,
+      FALLBACK_SOURCE_ACTION_PATTERN
+    ),
+    explicitActions: safeSourceSentences(
+      sourceDocuments,
+      EXPLICIT_SOURCE_ACTION_PATTERN
+    ),
+    risks: prioritizedSafeSourceSentences(
+      sourceDocuments,
+      EXPLICIT_SOURCE_RISK_PATTERN,
+      FALLBACK_SOURCE_RISK_PATTERN
+    ),
+    explicitRisks: safeSourceSentences(
+      sourceDocuments,
+      EXPLICIT_SOURCE_RISK_PATTERN
+    )
+  };
+}
+
+export function visibleContainsSentence(deckText: string, sentence: string) {
   const normalizedSentence = normalizeSentence(sentence).toLowerCase();
 
   if (deckText.includes(normalizedSentence)) {
@@ -551,24 +587,12 @@ function checkSourceGrounding(
     return checks;
   }
 
-  const sourceActions = prioritizedSafeSourceSentences(
-    sourceDocuments,
-    /^\s*(recommendation|next step|action):/i,
-    /\b(recommend|next step|action|owner|mitigate|enable|train|review)\b/i
-  );
-  const explicitSourceActions = safeSourceSentences(
-    sourceDocuments,
-    /^\s*(recommendation|next step|action):/i
-  );
-  const sourceRisks = prioritizedSafeSourceSentences(
-    sourceDocuments,
-    /^\s*(risk|blocker|concern|gap|issue):/i,
-    /\b(risk|blocker|concern|gap|delay|late|stalled|issue|low|lowest)\b/i
-  );
-  const explicitSourceRisks = safeSourceSentences(
-    sourceDocuments,
-    /^\s*(risk|blocker|concern|gap|issue):/i
-  );
+  const {
+    actions: sourceActions,
+    explicitActions: explicitSourceActions,
+    risks: sourceRisks,
+    explicitRisks: explicitSourceRisks
+  } = safeSourceFidelityLines(sourceDocuments);
 
   checks.push(
     check(
